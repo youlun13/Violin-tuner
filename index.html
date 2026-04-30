@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Violin Intonation Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #c8a96e;
+    --accent2: #7eb8c8;
+    --sharp: #e87c6a;
+    --flat: #6aace8;
+    --good: #7ec88a;
+    --text: #e8e4dc;
+    --muted: #5a5870;
+    --dim: #2a2838;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 20%, rgba(200,169,110,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 60% at 80% 80%, rgba(126,184,200,0.04) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+  .container {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 480px;
+    padding: 20px 16px 40px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .header { text-align: center; padding: 8px 0 4px; }
+  .header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300; font-size: 26px;
+    letter-spacing: 0.12em; color: var(--accent);
+  }
+  .header p {
+    font-size: 10px; color: var(--muted);
+    letter-spacing: 0.2em; text-transform: uppercase; margin-top: 4px;
+  }
+  .listen-status {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 4px 0;
+    font-size: 9px; letter-spacing: 0.25em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .listen-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted); transition: background 0.3s;
+  }
+  .listen-dot.active {
+    background: var(--good);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .listen-dot.error { background: var(--sharp); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .ref-row {
+    display: flex; align-items: center; gap: 10px; padding: 0 4px;
+    font-size: 10px; color: var(--muted); letter-spacing: 0.1em;
+  }
+  .ref-row input[type=range] { flex: 1; accent-color: var(--accent); height: 2px; }
+  .ref-val { color: var(--accent); min-width: 50px; text-align: right; }
+  .mode-indicator {
+    text-align: center;
+    font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--accent);
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    transition: color 0.3s;
+  }
+  .mode-indicator.idle { color: var(--muted); }
+  .main-display {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .note-label {
+    text-align: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 56px; font-weight: 300;
+    color: var(--text); line-height: 1;
+    letter-spacing: 0.05em;
+    min-height: 60px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .note-label .freq {
+    font-size: 13px; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    align-self: flex-end; padding-bottom: 8px;
+  }
+  .meter-wrap { position: relative; height: 48px; }
+  .meter-track {
+    position: absolute; top: 50%; left: 0; right: 0;
+    height: 1px; background: var(--border); transform: translateY(-50%);
+  }
+  .meter-center {
+    position: absolute; top: 50%; left: 50%;
+    width: 1px; height: 20px; background: var(--muted);
+    transform: translate(-50%, -50%);
+  }
+  .meter-ticks {
+    position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%);
+  }
+  .tick {
+    position: absolute; top: 50%; width: 1px;
+    background: var(--dim); transform: translateY(-50%);
+  }
+  .meter-needle {
+    position: absolute; top: 50%; left: 50%;
+    width: 3px; height: 36px;
+    background: var(--accent); border-radius: 2px;
+    transform: translate(-50%, -50%);
+    transition: left 0.08s ease-out, background 0.3s;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .meter-label-left {
+    position: absolute; left: 4px; bottom: 0;
+    font-size: 9px; color: var(--flat); letter-spacing: 0.1em;
+  }
+  .meter-label-right {
+    position: absolute; right: 4px; bottom: 0;
+    font-size: 9px; color: var(--sharp); letter-spacing: 0.1em;
+  }
+  .cents-value {
+    text-align: center; font-size: 11px;
+    color: var(--muted); letter-spacing: 0.1em;
+  }
+  .status-badge {
+    text-align: center;
+    font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 2px;
+    background: var(--dim); color: var(--muted);
+    transition: all 0.3s;
+    align-self: center;
+  }
+  .status-badge.in-tune { background: rgba(126,200,138,0.12); color: var(--good); }
+  .status-badge.sharp   { background: rgba(232,124,106,0.12); color: var(--sharp); }
+  .status-badge.flat    { background: rgba(106,172,232,0.12); color: var(--flat); }
+  .interval-badge {
+    text-align: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px; font-style: italic;
+    color: var(--accent2);
+    letter-spacing: 0.08em;
+    min-height: 26px;
+  }
+  .voice-row {
+    background: var(--dim); border-radius: 3px;
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .voice-header {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  }
+  .voice-note {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 28px; font-weight: 300; line-height: 1;
+  }
+  .voice-role {
+    font-size: 9px; color: var(--muted);
+    letter-spacing: 0.2em; text-transform: uppercase;
+  }
+  .voice-freq { font-size: 10px; color: var(--muted); }
+  .voice-meter { position: relative; height: 28px; }
+  .voice-track {
+    position: absolute; top: 50%; left: 0; right: 0;
+    height: 1px; background: var(--border); transform: translateY(-50%);
+  }
+  .voice-center-line {
+    position: absolute; top: 50%; left: 50%;
+    width: 1px; height: 14px; background: var(--muted);
+    transform: translate(-50%, -50%);
+  }
+  .voice-needle {
+    position: absolute; top: 50%; left: 50%;
+    width: 2px; height: 22px; border-radius: 1px;
+    background: var(--accent);
+    transform: translate(-50%, -50%);
+    transition: left 0.08s ease-out, background 0.3s;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .voice-suggestion {
+    font-size: 10px; letter-spacing: 0.1em;
+    text-align: right; min-height: 14px;
+  }
+  .beating-section {
+    background: var(--dim); border-radius: 3px;
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .beating-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .beating-value {
+    font-size: 18px;
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--accent2);
+  }
+  .beating-bar-wrap {
+    height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .beating-bar {
+    height: 100%; background: var(--accent2); border-radius: 2px;
+    transition: width 0.15s ease-out, background 0.3s; width: 0%;
+  }
+  .beating-bar.good { background: var(--good); }
+  .wave-canvas {
+    width: 100%; height: 44px;
+    border-radius: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: block;
+  }
+  .perm-overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,10,15,0.95);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; z-index: 100;
+  }
+  .perm-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 28px 24px;
+    text-align: center; max-width: 320px;
+  }
+  .perm-card h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300; font-size: 24px;
+    color: var(--accent);
+    margin-bottom: 12px; letter-spacing: 0.05em;
+  }
+  .perm-card p {
+    font-size: 11px; line-height: 1.7;
+    color: var(--muted); letter-spacing: 0.05em;
+    margin-bottom: 20px;
+  }
+  .perm-btn {
+    background: none;
+    border: 1px solid var(--accent); color: var(--accent);
+    padding: 12px 28px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
+    border-radius: 3px; cursor: pointer; transition: all 0.2s;
+  }
+  .perm-btn:hover { background: rgba(200,169,110,0.08); }
+  .footer {
+    text-align: center;
+    font-size: 9px; color: var(--muted);
+    letter-spacing: 0.15em; opacity: 0.5; margin-top: 8px;
+  }
+  .hidden { display: none !important; }
+  .display-fade { animation: fadeIn 0.25s ease-out; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="perm-overlay" id="permOverlay">
+  <div class="perm-card">
+    <h2>Intonation</h2>
+    <p>This tuner needs access to your microphone to analyze pitch in real time. Audio is processed entirely on your device.</p>
+    <button class="perm-btn" onclick="initMic()">Enable Microphone</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <h1>Intonation</h1>
+    <p>Violin Pitch Analyzer</p>
+  </div>
+
+  <div class="listen-status">
+    <span class="listen-dot" id="listenDot"></span>
+    <span id="listenText">Initializing</span>
+  </div>
+
+  <div class="ref-row">
+    <span>A =</span>
+    <input type="range" id="refSlider" min="430" max="450" value="442" step="1">
+    <span class="ref-val" id="refVal">442 Hz</span>
+  </div>
+
+  <div class="mode-indicator idle" id="modeIndicator">— No signal —</div>
+
+  <canvas class="wave-canvas" id="waveCanvas"></canvas>
+
+  <div class="main-display" id="singleDisplay">
+    <div class="note-label">
+      <span id="noteNameS">—</span>
+      <span class="freq" id="noteFreqS"></span>
+    </div>
+    <div class="meter-wrap">
+      <div class="meter-track"></div>
+      <div class="meter-ticks" id="meterTicks"></div>
+      <div class="meter-center"></div>
+      <div class="meter-needle" id="singleNeedle"></div>
+      <div class="meter-label-left">♭ flat</div>
+      <div class="meter-label-right">sharp ♯</div>
+    </div>
+    <div class="cents-value" id="singleCents">— cents</div>
+    <div class="status-badge" id="singleStatus">Waiting for signal</div>
+  </div>
+
+  <div class="main-display hidden" id="doubleDisplay">
+    <div class="interval-badge" id="intervalName">—</div>
+    <div class="voice-row">
+      <div class="voice-header">
+        <div>
+          <div class="voice-note" id="v1Note">—</div>
+          <div class="voice-freq" id="v1Freq"></div>
+        </div>
+        <div style="text-align:right">
+          <div class="voice-role" id="v1Role">Reference</div>
+          <div class="voice-suggestion" id="v1Suggestion"></div>
+        </div>
+      </div>
+      <div class="voice-meter">
+        <div class="voice-track"></div>
+        <div class="voice-center-line"></div>
+        <div class="voice-needle" id="v1Needle"></div>
+      </div>
+    </div>
+    <div class="voice-row">
+      <div class="voice-header">
+        <div>
+          <div class="voice-note" id="v2Note">—</div>
+          <div class="voice-freq" id="v2Freq"></div>
+        </div>
+        <div style="text-align:right">
+          <div class="voice-role" id="v2Role">Adjust</div>
+          <div class="voice-suggestion" id="v2Suggestion"></div>
+        </div>
+      </div>
+      <div class="voice-meter">
+        <div class="voice-track"></div>
+        <div class="voice-center-line"></div>
+        <div class="voice-needle" id="v2Needle"></div>
+      </div>
+    </div>
+    <div class="beating-section">
+      <div class="beating-header">
+        <span>Beating Rate</span>
+        <span class="beating-value" id="beatingValue">— Hz</span>
+      </div>
+      <div class="beating-bar-wrap">
+        <div class="beating-bar" id="beatingBar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Pure intonation analyzer · Just intonation · Harmonic-aware detection</div>
+</div>
+
+<script>
+let REF_A = 442;
+let audioCtx = null, analyser = null, micStream = null;
+let isListening = false;
+
+const BUF_SIZE = 4096;
+
+let currentDetectedMode = 'idle';
+let pendingMode = 'idle';
+let modeStableCount = 0;
+const MODE_SWITCH_THRESHOLD = 3;
+
+const INTERVALS = [
+  { name: 'Unison',        ratio: 1/1   },
+  { name: 'Minor 2nd',     ratio: 16/15 },
+  { name: 'Major 2nd',     ratio: 9/8   },
+  { name: 'Minor 3rd',     ratio: 6/5   },
+  { name: 'Major 3rd',     ratio: 5/4   },
+  { name: 'Perfect 4th',   ratio: 4/3   },
+  { name: 'Tritone',       ratio: 45/32 },
+  { name: 'Perfect 5th',   ratio: 3/2   },
+  { name: 'Minor 6th',     ratio: 8/5   },
+  { name: 'Major 6th',     ratio: 5/3   },
+  { name: 'Minor 7th',     ratio: 16/9  },
+  { name: 'Major 7th',     ratio: 15/8  },
+  { name: 'Octave',        ratio: 2/1   },
+  { name: 'Minor 9th',     ratio: 32/15 },
+  { name: 'Major 9th',     ratio: 9/4   },
+  { name: 'Minor 10th',    ratio: 12/5  },
+  { name: 'Major 10th',    ratio: 5/2   },
+  { name: 'Perfect 11th',  ratio: 8/3   },
+  { name: 'Perfect 12th',  ratio: 3/1   },
+  { name: 'Double Octave', ratio: 4/1   },
+];
+
+const NOTE_NAMES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+
+(function() {
+  const t = document.getElementById('meterTicks');
+  for (let c = -50; c <= 50; c += 10) {
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.style.left = ((c + 50) / 100 * 100) + '%';
+    tick.style.height = c === 0 ? '0px' : '8px';
+    t.appendChild(tick);
+  }
+})();
+
+document.getElementById('refSlider').addEventListener('input', e => {
+  REF_A = parseInt(e.target.value);
+  document.getElementById('refVal').textContent = REF_A + ' Hz';
+});
+
+async function initMic() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      video: false
+    });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+    const source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = BUF_SIZE * 2;
+    analyser.smoothingTimeConstant = 0.1;
+    source.connect(analyser);
+    micStream = stream;
+    isListening = true;
+
+    document.getElementById('permOverlay').classList.add('hidden');
+    document.getElementById('listenDot').classList.add('active');
+    document.getElementById('listenText').textContent = 'Listening';
+
+    loop();
+  } catch(e) {
+    document.getElementById('listenDot').classList.add('error');
+    document.getElementById('listenText').textContent = 'Mic access denied';
+    alert('Microphone access denied. Please enable it in your browser settings and reload.');
+  }
+}
+
+// ─── MAIN LOOP ────────────────────────────────────────────────────────────
+function loop() {
+  if (!isListening) return;
+  requestAnimationFrame(loop);
+
+  const timeBuf = new Float32Array(BUF_SIZE);
+  analyser.getFloatTimeDomainData(timeBuf);
+  drawWave(timeBuf);
+
+  const rms = Math.sqrt(timeBuf.reduce((s, v) => s + v * v, 0) / timeBuf.length);
+  if (rms < 0.008) {
+    requestMode('idle');
+    return;
+  }
+
+  // 1. Find all spectral peaks
+  const peaks = findAllPeaks();
+
+  if (peaks.length === 0) {
+    requestMode('idle');
+    return;
+  }
+
+  // 2. Run harmonic-aware analysis
+  const result = analyzePeaks(peaks);
+
+  if (result.type === 'single') {
+    // Use YIN for higher precision on single notes
+    const yinFreq = yin(timeBuf, audioCtx.sampleRate);
+    const finalFreq = (yinFreq > 150 && yinFreq < 4500 && Math.abs(1200 * Math.log2(yinFreq / result.f0)) < 60)
+      ? yinFreq
+      : result.f0;
+    requestMode('single');
+    if (currentDetectedMode === 'single') updateSingle(finalFreq);
+  } else if (result.type === 'double') {
+    requestMode('double');
+    if (currentDetectedMode === 'double') updateDouble(result.f1, result.f2);
+  } else {
+    requestMode('idle');
+  }
+}
+
+// ─── PEAK DETECTION ──────────────────────────────────────────────────────
+function findAllPeaks() {
+  const fftSize = analyser.fftSize;
+  const freqBuf = new Float32Array(fftSize / 2);
+  analyser.getFloatFrequencyData(freqBuf);
+
+  const sampleRate = audioCtx.sampleRate;
+  const binHz = sampleRate / fftSize;
+
+  const peaks = [];
+  const minBin = Math.floor(150 / binHz);
+  const maxBin = Math.floor(5000 / binHz);
+  const NOISE_FLOOR = -55;
+
+  for (let i = minBin + 1; i < maxBin - 1; i++) {
+    if (freqBuf[i] > freqBuf[i-1] && freqBuf[i] > freqBuf[i+1] && freqBuf[i] > NOISE_FLOOR) {
+      // parabolic interpolation
+      const a = freqBuf[i-1], b = freqBuf[i], c = freqBuf[i+1];
+      const p = 0.5 * (a - c) / (a - 2*b + c);
+      const freq = (i + p) * binHz;
+      peaks.push({ freq, amp: b });
+    }
+  }
+
+  // Sort by amplitude descending, take top 12
+  peaks.sort((a, b) => b.amp - a.amp);
+  return peaks.slice(0, 12);
+}
+
+// ─── HARMONIC-AWARE ANALYSIS ──────────────────────────────────────────────
+function harmonicSeriesScore(f0, peaks, maxHarmonic = 8, toleranceCents = 30) {
+  let explained = 0;
+  const used = new Set();
+  const matched = [];
+
+  for (let h = 1; h <= maxHarmonic; h++) {
+    const target = f0 * h;
+    let bestIdx = -1, bestDiff = toleranceCents + 1;
+    for (let i = 0; i < peaks.length; i++) {
+      if (used.has(i)) continue;
+      const diffCents = Math.abs(1200 * Math.log2(peaks[i].freq / target));
+      if (diffCents < bestDiff) { bestDiff = diffCents; bestIdx = i; }
+    }
+    if (bestIdx >= 0) {
+      used.add(bestIdx);
+      const energy = Math.pow(10, peaks[bestIdx].amp / 10);
+      explained += energy;
+      matched.push({ h, idx: bestIdx, freq: peaks[bestIdx].freq, amp: peaks[bestIdx].amp });
+    }
+  }
+
+  return { explained, used, matched };
+}
+
+function detectHarmonicAnomaly(matched) {
+  if (matched.length < 2) return null;
+  let h1Amp = null;
+  for (const m of matched) if (m.h === 1) { h1Amp = m.amp; break; }
+  if (h1Amp === null) return null;
+  for (const m of matched) {
+    if (m.h >= 2 && m.amp > h1Amp - 3) {
+      return { harmonic: m.h };
+    }
+  }
+  return null;
+}
+
+function totalEnergy(peaks) {
+  return peaks.reduce((s, p) => s + Math.pow(10, p.amp / 10), 0);
+}
+
+function analyzePeaks(peaks) {
+  if (peaks.length === 0) return { type: 'idle' };
+
+  const total = totalEnergy(peaks);
+  const NOISE_FLOOR = -55;
+
+  // Candidates: top 5 strongest peaks
+  const sortedByAmp = [...peaks].sort((a, b) => b.amp - a.amp);
+  const candidateSet = new Set();
+  for (const p of sortedByAmp.slice(0, 5)) candidateSet.add(p.freq);
+  const candidates = [...candidateSet];
+
+  // ── Single hypothesis ──
+  let bestSingle = null, bestSingleScore = 0, bestSingleUsed = new Set(), bestSingleMatched = [];
+  for (const f0 of candidates) {
+    const r = harmonicSeriesScore(f0, peaks);
+    const ratio = r.explained / total;
+    if (ratio > bestSingleScore) {
+      bestSingleScore = ratio;
+      bestSingle = f0;
+      bestSingleUsed = r.used;
+      bestSingleMatched = r.matched;
+    }
+  }
+  if (bestSingle === null) return { type: 'idle' };
+
+  // Anomaly detection
+  const anomaly = detectHarmonicAnomaly(bestSingleMatched);
+
+  // Residual peaks
+  const residuals = [];
+  for (let i = 0; i < peaks.length; i++) {
+    if (!bestSingleUsed.has(i) && peaks[i].amp > NOISE_FLOOR) {
+      residuals.push(peaks[i]);
+    }
+  }
+
+  // ── Double hypothesis ──
+  let bestDouble = null, bestDoubleScore = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = 0; j < candidates.length; j++) {
+      if (candidates[j] <= candidates[i]) continue;
+      const f1 = candidates[i], f2 = candidates[j];
+      const r1 = harmonicSeriesScore(f1, peaks);
+      const remaining = peaks.filter((_, idx) => !r1.used.has(idx));
+      const r2 = harmonicSeriesScore(f2, remaining);
+      const score = (r1.explained + r2.explained) / total;
+      if (score > bestDoubleScore) {
+        bestDoubleScore = score;
+        bestDouble = { f1, f2 };
+      }
+    }
+  }
+
+  // ── Decision rules ──
+
+  // Rule 1: harmonic anomaly → double stop (octave-like)
+  if (anomaly) {
+    const f2implied = bestSingle * anomaly.harmonic;
+    return { type: 'double', f1: bestSingle, f2: f2implied };
+  }
+
+  // Rule 2: significant residual peak → double stop
+  const SIGNIFICANT_THRESHOLD = NOISE_FLOOR + 14;  // -41 dB
+  const significantResiduals = residuals.filter(r => r.amp > SIGNIFICANT_THRESHOLD);
+  if (significantResiduals.length > 0) {
+    significantResiduals.sort((a, b) => b.amp - a.amp);
+    const f2 = significantResiduals[0].freq;
+    const lo = Math.min(bestSingle, f2);
+    const hi = Math.max(bestSingle, f2);
+    const r = hi / lo;
+    // Reject if it's a clean integer harmonic
+    const rounded = Math.round(r);
+    if (Math.abs(r - rounded) > 0.04 || rounded === 1) {
+      return { type: 'double', f1: lo, f2: hi };
+    }
+  }
+
+  // Rule 3: double hypothesis substantially better
+  const DOUBLE_PENALTY = 0.08;
+  if (bestDouble && bestDoubleScore > bestSingleScore + DOUBLE_PENALTY) {
+    return { type: 'double', f1: bestDouble.f1, f2: bestDouble.f2 };
+  }
+
+  return { type: 'single', f0: bestSingle };
+}
+
+// ─── YIN ──────────────────────────────────────────────────────────────────
+function yin(buf, sampleRate) {
+  const W = buf.length;
+  const half = W >> 1;
+  const d = new Float32Array(half);
+
+  for (let tau = 1; tau < half; tau++) {
+    let sum = 0;
+    for (let i = 0; i < half; i++) {
+      const delta = buf[i] - buf[i + tau];
+      sum += delta * delta;
+    }
+    d[tau] = sum;
+  }
+
+  const cmnd = new Float32Array(half);
+  cmnd[0] = 1;
+  let running = 0;
+  for (let tau = 1; tau < half; tau++) {
+    running += d[tau];
+    cmnd[tau] = d[tau] * tau / running;
+  }
+
+  const threshold = 0.12;
+  let tau = -1;
+  for (let t = 2; t < half; t++) {
+    if (cmnd[t] < threshold) {
+      while (t + 1 < half && cmnd[t + 1] < cmnd[t]) t++;
+      tau = t; break;
+    }
+  }
+  if (tau === -1) return -1;
+
+  if (tau > 0 && tau < half - 1) {
+    const s0 = cmnd[tau - 1], s1 = cmnd[tau], s2 = cmnd[tau + 1];
+    tau = tau + (s2 - s0) / (2 * (2 * s1 - s2 - s0));
+  }
+  return sampleRate / tau;
+}
+
+// ─── MODE HYSTERESIS ─────────────────────────────────────────────────────
+function requestMode(m) {
+  if (m === pendingMode) {
+    modeStableCount++;
+  } else {
+    pendingMode = m;
+    modeStableCount = 1;
+  }
+  if (modeStableCount >= MODE_SWITCH_THRESHOLD && currentDetectedMode !== pendingMode) {
+    currentDetectedMode = pendingMode;
+    applyMode(currentDetectedMode);
+  }
+}
+
+function applyMode(m) {
+  const indicator = document.getElementById('modeIndicator');
+  const single = document.getElementById('singleDisplay');
+  const double = document.getElementById('doubleDisplay');
+
+  if (m === 'single') {
+    indicator.textContent = '◆ Single Note ◆';
+    indicator.classList.remove('idle');
+    single.classList.remove('hidden');
+    double.classList.add('hidden');
+    single.classList.remove('display-fade'); void single.offsetWidth; single.classList.add('display-fade');
+  } else if (m === 'double') {
+    indicator.textContent = '◆ Double Stop ◆';
+    indicator.classList.remove('idle');
+    double.classList.remove('hidden');
+    single.classList.add('hidden');
+    double.classList.remove('display-fade'); void double.offsetWidth; double.classList.add('display-fade');
+  } else {
+    indicator.textContent = '— No signal —';
+    indicator.classList.add('idle');
+    if (!single.classList.contains('hidden')) resetSingle();
+    if (!double.classList.contains('hidden')) resetDouble();
+  }
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+function freqToMidi(f) { return 69 + 12 * Math.log2(f / REF_A); }
+function midiToName(midi) {
+  const note = ((Math.round(midi) % 12) + 12) % 12;
+  const octave = Math.floor(Math.round(midi) / 12) - 1;
+  return NOTE_NAMES[note] + octave;
+}
+function getCents(f) {
+  const midi = freqToMidi(f);
+  return (midi - Math.round(midi)) * 100;
+}
+
+// ─── SINGLE UPDATE ────────────────────────────────────────────────────────
+function updateSingle(f) {
+  const midi = freqToMidi(f);
+  const name = midiToName(midi);
+  const cents = getCents(f);
+
+  document.getElementById('noteNameS').textContent = name;
+  document.getElementById('noteFreqS').textContent = f.toFixed(1) + ' Hz';
+  document.getElementById('singleCents').textContent = (cents >= 0 ? '+' : '') + cents.toFixed(1) + ' ¢';
+
+  const pct = Math.max(0, Math.min(100, (cents + 50)));
+  const needle = document.getElementById('singleNeedle');
+  needle.style.left = pct + '%';
+
+  const abs = Math.abs(cents);
+  let color, statusText, statusClass;
+  if (abs < 3) { color = 'var(--good)'; statusText = 'In Tune ✓'; statusClass = 'in-tune'; }
+  else if (cents > 0) { color = 'var(--sharp)'; statusText = '▲ Sharp ' + cents.toFixed(1) + '¢'; statusClass = 'sharp'; }
+  else { color = 'var(--flat)'; statusText = '▼ Flat ' + abs.toFixed(1) + '¢'; statusClass = 'flat'; }
+  needle.style.background = color;
+  needle.style.boxShadow = `0 0 8px ${color}`;
+
+  const s = document.getElementById('singleStatus');
+  s.textContent = statusText;
+  s.className = 'status-badge ' + statusClass;
+}
+
+function resetSingle() {
+  document.getElementById('noteNameS').textContent = '—';
+  document.getElementById('noteFreqS').textContent = '';
+  document.getElementById('singleCents').textContent = '— cents';
+  document.getElementById('singleNeedle').style.left = '50%';
+  document.getElementById('singleNeedle').style.background = 'var(--muted)';
+  document.getElementById('singleStatus').textContent = 'Waiting for signal';
+  document.getElementById('singleStatus').className = 'status-badge';
+}
+
+// ─── DOUBLE UPDATE ────────────────────────────────────────────────────────
+function updateDouble(f1, f2) {
+  // f1 is lower, f2 is higher (from analyzePeaks)
+  // Determine which is reference based on peaks' amplitude — for now use lower as reference
+  // Actually we need the original peaks info. Pass the strongest as reference.
+  // We'll reorder so ref = whichever was the dominant fundamental.
+  // For simplicity: use f1 (lower) as the bass anchor; user should hold the lower note steady typically.
+  // But the requirement was "louder = reference". Let's check:
+  // analyzePeaks returns f1 < f2 always. We don't know which was louder anymore.
+  // → Re-fetch from current peaks.
+
+  const peaks = findAllPeaks();
+  let amp1 = -100, amp2 = -100;
+  for (const p of peaks) {
+    if (Math.abs(1200 * Math.log2(p.freq / f1)) < 30) amp1 = Math.max(amp1, p.amp);
+    if (Math.abs(1200 * Math.log2(p.freq / f2)) < 30) amp2 = Math.max(amp2, p.amp);
+  }
+
+  const refFreq = amp1 >= amp2 ? f1 : f2;
+  const adjFreq = amp1 >= amp2 ? f2 : f1;
+
+  const fLow = Math.min(refFreq, adjFreq);
+  const fHigh = Math.max(refFreq, adjFreq);
+  const ratio = fHigh / fLow;
+
+  const interval = identifyInterval(ratio);
+  document.getElementById('intervalName').textContent = interval ? interval.name : 'Unknown interval';
+
+  updateRefVoice(1, refFreq);
+
+  if (interval) {
+    const targetAdj = refFreq < adjFreq
+      ? refFreq * interval.ratio
+      : refFreq / interval.ratio;
+    updateAdjVoice(2, adjFreq, targetAdj);
+    updateBeating(adjFreq, targetAdj);
+  } else {
+    updateRefVoice(2, adjFreq);
+    document.getElementById('v2Role').textContent = 'Adjust';
+    document.getElementById('beatingValue').textContent = '— Hz';
+    document.getElementById('beatingBar').style.width = '0%';
+  }
+}
+
+function identifyInterval(ratio) {
+  let best = null, bestDiff = Infinity;
+  for (const iv of INTERVALS) {
+    const diff = Math.abs(ratio - iv.ratio);
+    if (diff < bestDiff && diff < iv.ratio * 0.03) {
+      bestDiff = diff; best = iv;
+    }
+  }
+  return best;
+}
+
+function updateRefVoice(n, freq) {
+  const cents = getCents(freq);
+  document.getElementById(`v${n}Note`).textContent = midiToName(freqToMidi(freq));
+  document.getElementById(`v${n}Freq`).textContent = freq.toFixed(1) + ' Hz';
+  document.getElementById(`v${n}Role`).textContent = 'Reference · hold';
+  document.getElementById(`v${n}Suggestion`).textContent = '';
+
+  const pct = Math.max(0, Math.min(100, (cents + 50)));
+  const needle = document.getElementById(`v${n}Needle`);
+  needle.style.left = pct + '%';
+  needle.style.background = 'var(--accent)';
+}
+
+function updateAdjVoice(n, freq, targetFreq) {
+  const centsFromTarget = 1200 * Math.log2(freq / targetFreq);
+
+  document.getElementById(`v${n}Note`).textContent = midiToName(freqToMidi(freq));
+  document.getElementById(`v${n}Freq`).textContent = freq.toFixed(1) + ' Hz';
+  document.getElementById(`v${n}Role`).textContent = 'Adjust';
+
+  const pct = Math.max(0, Math.min(100, (centsFromTarget + 50)));
+  const needle = document.getElementById(`v${n}Needle`);
+  needle.style.left = pct + '%';
+
+  const abs = Math.abs(centsFromTarget);
+  let sug = '', color;
+  if (abs < 2) { color = 'var(--good)'; sug = 'In tune ✓'; }
+  else if (centsFromTarget > 0) { color = 'var(--sharp)'; sug = `▼ Lower ${abs.toFixed(1)}¢`; }
+  else { color = 'var(--flat)'; sug = `▲ Raise ${abs.toFixed(1)}¢`; }
+  needle.style.background = color;
+  const sugEl = document.getElementById(`v${n}Suggestion`);
+  sugEl.textContent = sug;
+  sugEl.style.color = color;
+}
+
+function updateBeating(freq, targetFreq) {
+  const beating = Math.abs(freq - targetFreq);
+  document.getElementById('beatingValue').textContent = beating.toFixed(2) + ' Hz';
+  const pct = Math.min(100, beating / 10 * 100);
+  const bar = document.getElementById('beatingBar');
+  bar.style.width = pct + '%';
+  bar.className = 'beating-bar' + (beating < 0.5 ? ' good' : '');
+}
+
+function resetDouble() {
+  document.getElementById('intervalName').textContent = '—';
+  ['1', '2'].forEach(n => {
+    document.getElementById(`v${n}Note`).textContent = '—';
+    document.getElementById(`v${n}Freq`).textContent = '';
+    document.getElementById(`v${n}Suggestion`).textContent = '';
+    document.getElementById(`v${n}Needle`).style.left = '50%';
+    document.getElementById(`v${n}Needle`).style.background = 'var(--muted)';
+  });
+  document.getElementById('beatingValue').textContent = '— Hz';
+  document.getElementById('beatingBar').style.width = '0%';
+}
+
+function drawWave(buf) {
+  const canvas = document.getElementById('waveCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== canvas.offsetWidth * dpr) {
+    canvas.width = canvas.offsetWidth * dpr;
+    canvas.height = canvas.offsetHeight * dpr;
+  }
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(200,169,110,0.5)';
+  ctx.lineWidth = 1.2 * dpr;
+  const step = Math.floor(buf.length / W);
+  for (let x = 0; x < W; x++) {
+    const v = buf[x * step] || 0;
+    const y = H / 2 + v * (H / 2) * 0.85;
+    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+</script>
+</body>
+</html>
