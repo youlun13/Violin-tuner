@@ -1,0 +1,2683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
+<meta name="apple-mobile-web-app-title" content="Intonation">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Intonation · Dial — Carbon</title>
+<script>
+// apply the saved theme before first paint (no flash);
+// #light / #dark in the URL forces a theme (handy for previews)
+(function () {
+  try {
+    var t = localStorage.getItem('intonation-theme');
+    if (/light/.test(location.hash)) t = 'light';
+    else if (/dark/.test(location.hash)) t = 'dark';
+    if (t === 'light') document.documentElement.dataset.theme = 'light';
+  } catch (e) {}
+})();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ═══ Carbon — instrument-panel language, dark (default) & light ═══ */
+  :root {
+    --paper:#0f1214; --paper-t:#161a1d; --paper-d:#1e2327;
+    --rule:#2b3238; --rule-s:#22282d;
+    --ink:#e9edf0; --ink-s:#b9c2c9; --ink-f:#8b959e; --ink-m:#59636b;
+    --sage:#35d07f; --sage-s:#113626; --sage-d:#2fc476;
+    --rust:#ec5f5f; --rust-s:#5c2626;
+    --vibrato:#8f7ff2; --amber:#f0a63c;
+    --pulse:53,208,127;
+    --glow-ok: rgba(53,208,127,0.16);
+    --glow-tol: rgba(53,208,127,0.55);
+    --letter-glow: rgba(53,208,127,0.35);
+    --top-glow: rgba(255,255,255,0.045);
+    --brass:#d29a55; --brass-hi:#f2c98e; --brass-glow:rgba(224,166,96,0.4);
+    --overlay: rgba(10,12,14,0.96);
+    --card-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  }
+  :root[data-theme="light"] {
+    --paper:#eef0f3; --paper-t:#ffffff; --paper-d:#e2e6ea;
+    --rule:#d5dade; --rule-s:#e2e6ea;
+    --ink:#181c20; --ink-s:#454c53; --ink-f:#6d757d; --ink-m:#aab2ba;
+    --sage:#48d18c; --sage-s:#def5e8; --sage-d:#2cbd71;
+    --rust:#d84c44; --rust-s:#f3cdca;
+    --vibrato:#7a63d8; --amber:#d98f1f;
+    --pulse:44,189,113;
+    --glow-ok: rgba(44,189,113,0.18);
+    --glow-tol: rgba(44,189,113,0.5);
+    --letter-glow: rgba(44,189,113,0.3);
+    --top-glow: rgba(0,0,0,0.03);
+    --brass:#b0762d; --brass-hi:#d49c53; --brass-glow:rgba(176,118,45,0.22);
+    --overlay: rgba(238,240,243,0.96);
+    --card-shadow: 0 12px 40px rgba(20,30,40,0.15);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  /* hard no-scroll lock: iOS Safari ignores overflow:hidden on the body and
+     still rubber-bands the page — position:fixed is the only reliable seal */
+  html { height: 100%; height: 100dvh; overflow: hidden; overscroll-behavior: none; }
+  body {
+    position: fixed; inset: 0; width: 100%; height: 100dvh;
+    overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
+    background: var(--paper); color: var(--ink);
+    font-family: 'Manrope', sans-serif; font-weight: 500; user-select: none; -webkit-user-select: none;
+    display: flex; justify-content: center;
+    transition: background-color 0.35s ease, color 0.35s ease;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: radial-gradient(ellipse 90% 60% at 50% -10%, var(--top-glow), transparent);
+    pointer-events: none; z-index: 0;
+  }
+  .app {
+    position: relative; z-index: 1; width: 100%; max-width: 480px;
+    margin: 0 auto; padding: 0 18px; padding-top: env(safe-area-inset-top);
+    height: 100%;
+    /* minmax(0,1fr): the stage row must COMPRESS below its min-content on
+       short phones instead of pushing the tones row off-screen */
+    display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden;
+  }
+
+  /* ─── top bar ─── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0 7px; border-bottom: 0.5px solid var(--rule);
+    transition: border-color 0.35s ease;
+  }
+  .topbar-title { font-weight: 600; font-size: 20px; letter-spacing: 0.02em; line-height: 1; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .listen-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); animation: pulse-ring 1.8s ease-out infinite; }
+  .listen-dot.warn { background: var(--amber); animation: none; box-shadow: 0 0 0 3px rgba(240,166,60,0.22); }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(var(--pulse), 0.5); }
+    100% { box-shadow: 0 0 0 7px rgba(var(--pulse), 0); }
+  }
+  .topbar-ref { font-size: 10px; letter-spacing: 0.15em; color: var(--ink-f); font-weight: 600; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+  .topbar-stamp {
+    width: 16px; height: 16px; border: 1px solid var(--ink-f); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; color: var(--ink-f); transition: all 0.3s;
+  }
+  .topbar-stamp.good { color: var(--sage-d); border-color: var(--sage-d); }
+  .topbar-stamp.bad  { color: var(--rust);  border-color: var(--rust); }
+
+  /* ─── settings: reference · tolerance · display ─── */
+  .settings-row { display: grid; grid-template-columns: 1.25fr 0.95fr auto; gap: 8px; padding: 5px 0; }
+  .ctl-card {
+    background: var(--paper-t); border: 0.5px solid var(--rule); border-radius: 6px;
+    padding: 7px 8px 8px;
+    transition: background-color 0.35s ease, border-color 0.35s ease;
+  }
+  .ctl-label { font-size: 8px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--ink-f); text-align: center; margin-bottom: 6px; font-weight: 600; }
+  .ref-row { display: flex; align-items: center; justify-content: space-between; }
+  .ref-btn {
+    width: 28px; height: 28px; background: var(--paper); border: 0.5px solid var(--rule);
+    border-radius: 50%; color: var(--ink); font-size: 16px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+  }
+  .ref-btn:active { background: var(--paper-d); transform: scale(0.93); }
+  .ref-value { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ref-value em { font-size: 10px; color: var(--ink-f); margin-left: 2px; font-style: normal; }
+  .tol-row { display: flex; gap: 3px; background: var(--paper); border: 0.5px solid var(--rule); border-radius: 4px; padding: 2px; transition: background-color 0.35s ease, border-color 0.35s ease; }
+  .tol-btn {
+    flex: 1; background: none; border: none; border-radius: 3px; padding: 4px 2px;
+    font-family: 'Manrope', sans-serif; font-size: 8px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-f); cursor: pointer; transition: all 0.2s; font-weight: 600;
+  }
+  .tol-btn .amt { display: block; font-size: 9.5px; margin-top: 1px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .tol-btn.active { background: var(--ink); color: var(--paper); }
+  .tol-btn.active .amt { color: var(--amber); }
+
+  .ctl-card--theme { width: 62px; display: flex; flex-direction: column; }
+  .theme-btn {
+    width: 28px; height: 28px; margin: 0 auto;
+    background: var(--paper); border: 0.5px solid var(--rule); border-radius: 50%;
+    color: var(--ink-s); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .theme-btn:active { background: var(--paper-d); transform: scale(0.93); }
+  .theme-btn svg { width: 15px; height: 15px; display: none; }
+  :root:not([data-theme="light"]) .theme-btn .icon-sun { display: block; }
+  :root[data-theme="light"] .theme-btn .icon-moon { display: block; }
+
+  .wave-canvas {
+    width: 100%; height: 20px; border-radius: 3px;
+    background: var(--paper-t); border: 0.5px solid var(--rule-s);
+    display: block; margin: 2px 0 4px;
+    transition: background-color 0.35s ease, border-color 0.35s ease;
+  }
+
+  /* ─── stage ─── */
+  .stage { display: flex; flex-direction: column; gap: 7px; min-height: 0; padding-bottom: 4px; transition: opacity 0.4s; }
+  body.frozen .stage { opacity: 0.55; }
+
+  .iv-strip { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 2px 0; min-height: 22px; position: relative; }
+  .iv-name { font-size: 14px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink); }
+  .iv-name em { font-style: normal; }
+  .iv-strip.idle .iv-name { color: var(--ink-m); }
+  .iv-strip.vib  .iv-name { color: var(--vibrato); }
+  .iv-meta { font-size: 8px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-f); font-weight: 600; }
+  .iv-strip::after {
+    content: 'held'; position: absolute; right: 0; top: 4px;
+    font-size: 8px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-m); border: 0.5px solid var(--rule); border-radius: 999px;
+    padding: 2px 7px; opacity: 0; transition: opacity 0.3s;
+  }
+  body.frozen .iv-strip::after { opacity: 1; }
+
+  .voice {
+    flex: 1; min-height: 0; overflow: hidden;
+    background: var(--paper-t); border: 0.5px solid var(--rule); border-radius: 6px;
+    display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 8px 14px 9px;
+    transition: opacity 0.45s ease, border-color 0.35s ease, box-shadow 0.35s ease,
+                filter 0.45s ease, background-color 0.35s ease;
+    position: relative;
+  }
+  .voice--a { flex: 1.1; }
+  .voice.ok { border-color: var(--sage-d); box-shadow: 0 0 0 1px var(--sage-d), 0 4px 24px var(--glow-ok); }
+  body[data-mode="single"] #voiceB, body[data-mode="idle"] #voiceB { opacity: 0.34; filter: saturate(0.5); }
+  body[data-mode="idle"] .beat-strip, body[data-mode="single"] .beat-strip { opacity: 0.3; }
+
+  /* wide shallow VU dial — the card's shrinkable element: on short phones it
+     gives ground first (viewBox scales the whole face down, geometry intact) */
+  .dial { display: block; width: 100%; flex: 1 1 0; min-height: 30px; max-height: 97px; overflow: hidden; }
+  .dial-track { fill: none; stroke: var(--rule); stroke-width: 1.4; transition: stroke 0.35s ease; }
+  .dial-tol { fill: none; stroke: var(--sage-s); stroke-width: 9; stroke-linecap: butt; opacity: 0.85; transition: stroke 0.35s, opacity 0.35s; }
+  .dial-tick { stroke: var(--ink-f); stroke-width: 0.7; opacity: 0.58; }
+  .dial-tick.major { stroke: var(--ink-s); stroke-width: 0.9; opacity: 0.95; }
+  .dial-tick.zero { stroke: var(--ink); stroke-width: 1.2; opacity: 1; }
+  .dial-num { font-family: 'Manrope', sans-serif; font-size: 8.5px; font-weight: 600; fill: var(--ink-f); font-variant-numeric: tabular-nums; }
+  .dial-needle { transition: transform 0.18s cubic-bezier(0.22, 0.9, 0.3, 1); }
+  .needle-line { stroke: var(--amber); stroke-width: 2.4; stroke-linecap: round; transition: stroke 0.3s; }
+  .needle-hub  { fill: var(--ink); transition: fill 0.35s ease; }
+  .dial.intune .needle-line { stroke: var(--sage-d); }
+  .dial.intune .dial-tol { stroke: var(--sage-d); opacity: 1; filter: drop-shadow(0 0 6px var(--glow-tol)); }
+
+  /* voice header */
+  .v-role { display: none; }
+  .v-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  .v-note { line-height: 0.9; display: flex; align-items: flex-start; gap: 3px; }
+  .v-letter { font-weight: 600; letter-spacing: -0.02em; color: var(--ink); transition: color 0.35s; }
+  .voice--a .v-letter { font-size: clamp(40px, 11.5vw, 54px); }
+  .voice--b .v-letter { font-size: clamp(32px, 9vw, 44px); }
+  .v-oct { color: var(--rust); font-size: clamp(12px, 3.4vw, 16px); margin-top: 5px; font-weight: 700; }
+  .voice.ok .v-letter { color: var(--sage-d); text-shadow: 0 0 16px var(--letter-glow); }
+  .v-nums { text-align: right; display: flex; flex-direction: column; gap: 1px; align-items: flex-end; padding-bottom: 4px; }
+  .v-freq { display: none; }
+  /* the ± cents deviation is primary information — large and state-colored */
+  .v-cents {
+    font-size: clamp(22px, 6.6vw, 30px); font-weight: 700;
+    letter-spacing: -0.01em; color: var(--ink);
+    font-variant-numeric: tabular-nums; line-height: 1;
+    transition: color 0.3s;
+  }
+  .voice.ok .v-cents { color: var(--sage-d); }
+  .pill-row { display: flex; justify-content: center; margin-top: 1px; }
+
+  .pill {
+    display: inline-block; padding: 4px 11px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+    transition: all 0.3s; border: 0.5px solid transparent;
+  }
+  .pill.good { background: var(--sage-d); color: var(--paper-t); box-shadow: 0 1px 6px var(--glow-ok); }
+  .pill.bad  { background: var(--rust);   color: var(--paper-t); box-shadow: 0 1px 6px rgba(216,76,68,0.25); }
+  .pill.idle { background: var(--paper-d); color: var(--ink-f); border-color: var(--rule); }
+  .pill.idle em { font-style: normal; }
+  .pill.vib  { background: var(--vibrato); color: var(--paper-t); }
+
+  /* beating strip */
+  .beat-strip {
+    background: var(--paper-t); border: 0.5px solid var(--rule-s); border-radius: 6px;
+    padding: 6px 12px 7px; flex-shrink: 0;
+    transition: opacity 0.45s ease, background-color 0.35s ease, border-color 0.35s ease;
+  }
+  .beat-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .beat-label { font-size: 8px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--ink-f); font-weight: 600; }
+  .beat-val { font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .beat-val em { font-style: normal; }
+  .beat-val.good { color: var(--sage-d); } .beat-val.bad { color: var(--rust); }
+  .beat-track { position: relative; height: 5px; background: var(--paper-d); border-radius: 3px; overflow: hidden; transition: background-color 0.35s ease; }
+  .beat-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0%; border-radius: 3px; transition: width 0.25s ease-out;
+    background: linear-gradient(90deg, var(--sage-d) 0%, var(--amber) 50%, var(--rust) 100%); }
+  .beat-pulse { position: absolute; top: 50%; width: 7px; height: 7px; background: var(--ink-s); border-radius: 50%;
+    transform: translate(-50%,-50%); opacity: 0; left: 4%; }
+  .beat-pulse.active { opacity: 1; animation-name: pulseSlide; animation-iteration-count: infinite; animation-timing-function: ease-in-out; animation-direction: alternate; }
+  @keyframes pulseSlide { 0% { left: 4%; } 100% { left: 96%; } }
+
+  /* ─── tones ─── */
+  .tones-section { padding: 4px 0 max(16px, env(safe-area-inset-bottom)); border-top: 0.5px solid var(--rule-s); transition: border-color 0.35s ease; }
+  .tones-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .tones-title { font-size: 12px; font-weight: 500; }
+  .tones-title em { font-style: normal; }
+  .tones-meta { font-size: 8px; font-weight: 600; letter-spacing: 0.25em; text-transform: uppercase; color: var(--ink-f); }
+  .tones-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .tone-card {
+    background: var(--paper-t); border: 0.5px solid var(--rule); border-radius: 6px;
+    padding: 7px 4px 6px; text-align: center; cursor: pointer;
+    transition: all 0.2s; font-family: inherit; color: inherit;
+  }
+  .tone-card:active { transform: scale(0.96); }
+  .tone-card.playing { background: var(--sage-d); border-color: var(--sage-d); }
+  .tone-card.playing .tone-letter, .tone-card.playing .tone-hz { color: var(--paper-t); }
+  .tone-letter { font-size: 18px; font-weight: 600; line-height: 1; }
+  .tone-hz { font-size: 8px; font-weight: 600; color: var(--ink-f); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  /* ─── permission overlay ─── */
+  .perm-overlay {
+    position: fixed; inset: 0; background: var(--overlay); backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 100;
+  }
+  .perm-card {
+    background: var(--paper-t); border: 0.5px solid var(--rule); border-radius: 8px;
+    padding: 28px 24px; text-align: center; max-width: 320px;
+    box-shadow: var(--card-shadow);
+  }
+  .perm-card h2 { font-weight: 600; font-size: 26px; margin-bottom: 11px; letter-spacing: 0.02em; }
+  .perm-rule {
+    width: 62%; height: 2px; margin: 0 auto 16px; border-radius: 1px;
+    background: linear-gradient(90deg, transparent, var(--brass) 12%, var(--brass-hi) 50%, var(--brass) 88%, transparent);
+    box-shadow: 0 0 8px var(--brass-glow);
+  }
+  .perm-card p { font-size: 15px; line-height: 1.65; color: var(--ink-s); margin-bottom: 22px; }
+  .perm-btn {
+    background: var(--ink); border: none; color: var(--paper); padding: 11px 26px;
+    font-family: 'Manrope', sans-serif; font-size: 10px; letter-spacing: 0.25em;
+    text-transform: uppercase; font-weight: 600; border-radius: 999px; cursor: pointer;
+  }
+  .hidden { display: none !important; }
+  /* forced-portrait mode: the notch sits on a long edge — pad the app's
+     visual top with whichever side inset applies */
+  body.rl .app { padding-top: max(0px, env(safe-area-inset-left)); }
+  body.rr .app { padding-top: max(0px, env(safe-area-inset-right)); }
+
+  /* ─── short screens (browser toolbars, small phones): everything compresses
+     in place — the page itself must NEVER scroll ─── */
+  @media (max-height: 730px) and (orientation: portrait) {
+    .topbar { padding: 6px 0 5px; }
+    .topbar-title { font-size: 18px; }
+    .settings-row { padding: 4px 0; }
+    .ctl-card { padding: 5px 7px 6px; }
+    .ctl-label { margin-bottom: 4px; }
+    .ref-btn, .theme-btn { width: 25px; height: 25px; }
+    .ref-value { font-size: 17px; }
+    .wave-canvas { height: 15px; margin: 1px 0 3px; }
+    .stage { gap: 5px; }
+    .iv-strip { min-height: 18px; padding: 1px 0; }
+    .voice { padding: 5px 12px 6px; gap: 2px; }
+    .voice--a .v-letter { font-size: clamp(32px, 10vw, 44px); }
+    .voice--b .v-letter { font-size: clamp(27px, 8vw, 38px); }
+    .v-cents { font-size: clamp(19px, 5.8vw, 26px); }
+    .v-nums { padding-bottom: 2px; }
+    .pill { padding: 3px 10px; font-size: 9px; }
+    .dial-num { font-size: 10px; }   /* the face scales down — keep numerals legible */
+    .beat-strip { padding: 4px 11px 5px; }
+    .beat-head { margin-bottom: 3px; }
+    .tones-section { padding: 3px 0 max(10px, env(safe-area-inset-bottom)); }
+    .tones-header { margin-bottom: 4px; }
+    .tone-card { padding: 5px 4px 4px; }
+    .tone-letter { font-size: 16px; }
+  }
+  @media (max-height: 620px) and (orientation: portrait) {
+    .topbar { padding: 4px 0 4px; }
+    .settings-row { padding: 3px 0; }
+    .wave-canvas { height: 11px; }
+    .stage { gap: 4px; }
+    .iv-strip { min-height: 15px; }
+    .voice--a .v-letter { font-size: clamp(27px, 8.6vw, 36px); }
+    .voice--b .v-letter { font-size: clamp(23px, 7vw, 31px); }
+    .v-cents { font-size: clamp(17px, 5vw, 22px); }
+    .v-oct { margin-top: 3px; }
+    .dial-num { font-size: 11px; }
+    .tone-letter { font-size: 15px; }
+    .tone-card { padding: 4px 4px 3px; }
+    .tones-section { padding: 2px 0 max(8px, env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body data-mode="idle">
+
+<div class="perm-overlay" id="permOverlay">
+  <div class="perm-card">
+    <h2>Intonation</h2>
+    <div class="perm-rule"></div>
+    <p>Please grant microphone access. All audio is analyzed locally on your device.</p>
+    <button class="perm-btn" onclick="initMic()">Begin Listening</button>
+  </div>
+</div>
+
+<div class="app">
+  <div class="topbar">
+    <div class="topbar-title">Intonation</div>
+    <div class="topbar-right">
+      <span class="listen-dot"></span>
+      <span class="topbar-ref">A = <span id="stampRefVal">442</span> Hz</span>
+      <span class="topbar-stamp" id="topbarStamp">◦</span>
+    </div>
+  </div>
+
+  <div class="settings-row">
+    <div class="ctl-card">
+      <div class="ctl-label">Reference Pitch</div>
+      <div class="ref-row">
+        <button class="ref-btn" id="refMinus">−</button>
+        <span class="ref-value"><span id="refVal">442</span><em>Hz</em></span>
+        <button class="ref-btn" id="refPlus">+</button>
+      </div>
+    </div>
+    <div class="ctl-card">
+      <div class="ctl-label">Tolerance</div>
+      <div class="tol-row">
+        <button class="tol-btn active" data-tol="3" onclick="setTolerance(3)">Std<span class="amt">±3¢</span></button>
+        <button class="tol-btn" data-tol="1.5" onclick="setTolerance(1.5)">Pre<span class="amt">±1.5¢</span></button>
+      </div>
+    </div>
+    <div class="ctl-card ctl-card--theme">
+      <div class="ctl-label">Display</div>
+      <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" aria-label="switch light/dark">
+        <svg class="icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <circle cx="8" cy="8" r="3.1" fill="currentColor" stroke="none"/>
+          <line x1="8" y1="0.9" x2="8" y2="2.6"/><line x1="8" y1="13.4" x2="8" y2="15.1"/>
+          <line x1="0.9" y1="8" x2="2.6" y2="8"/><line x1="13.4" y1="8" x2="15.1" y2="8"/>
+          <line x1="3" y1="3" x2="4.2" y2="4.2"/><line x1="11.8" y1="11.8" x2="13" y2="13"/>
+          <line x1="3" y1="13" x2="4.2" y2="11.8"/><line x1="11.8" y1="4.2" x2="13" y2="3"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 16 16">
+          <path d="M13.6 9.4A6 6 0 1 1 6.6 2.4a4.7 4.7 0 0 0 7 7Z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <canvas class="wave-canvas" id="waveCanvas"></canvas>
+
+  <div class="stage">
+    <div class="iv-strip idle" id="ivStrip">
+      <span class="iv-name" id="ivName"><em>— awaiting signal —</em></span>
+      <span class="iv-meta" id="ivMeta"></span>
+    </div>
+
+    <div class="voice voice--a" id="voiceA">
+      <div class="v-role" id="vA_role">now playing</div>
+      <div class="v-head">
+        <div class="v-note"><span class="v-letter" id="vA_letter">—</span><span class="v-oct hidden" id="vA_oct"></span></div>
+        <div class="v-nums"><span class="v-freq" id="vA_freq">— Hz</span><span class="v-cents" id="vA_cents">—</span></div>
+      </div>
+      <svg class="dial" id="dialA" viewBox="0 0 360 84"></svg>
+      <div class="pill-row"><span class="pill idle" id="vA_pill"><em>awaiting</em></span></div>
+    </div>
+
+    <div class="voice voice--b" id="voiceB">
+      <div class="v-role" id="vB_role">adjust · waiting</div>
+      <div class="v-head">
+        <div class="v-note"><span class="v-letter" id="vB_letter">—</span><span class="v-oct hidden" id="vB_oct"></span></div>
+        <div class="v-nums"><span class="v-freq" id="vB_freq">— Hz</span><span class="v-cents" id="vB_cents">—</span></div>
+      </div>
+      <svg class="dial" id="dialB" viewBox="0 0 360 84"></svg>
+      <div class="pill-row"><span class="pill idle" id="vB_pill"><em>second voice</em></span></div>
+    </div>
+
+    <div class="beat-strip">
+      <div class="beat-head"><span class="beat-label">Beating Rate</span><span class="beat-val" id="beatVal"><em>—</em></span></div>
+      <div class="beat-track"><div class="beat-fill" id="beatFill"></div><div class="beat-pulse" id="beatPulse"></div></div>
+    </div>
+  </div>
+
+  <div class="tones-section">
+    <div class="tones-header">
+      <div class="tones-title"><em>Reference Tones</em></div>
+      <div class="tones-meta">Tap to play</div>
+    </div>
+    <div class="tones-grid">
+      <button class="tone-card" data-string="0"><div class="tone-letter">C</div><div class="tone-hz">131.4</div></button>
+      <button class="tone-card" data-string="1"><div class="tone-letter">G</div><div class="tone-hz">196.9</div></button>
+      <button class="tone-card" data-string="2"><div class="tone-letter">D</div><div class="tone-hz">295.0</div></button>
+      <button class="tone-card" data-string="3"><div class="tone-letter">A</div><div class="tone-hz">442.0</div></button>
+      <button class="tone-card" data-string="4"><div class="tone-letter">E</div><div class="tone-hz">662.3</div></button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ═══ theme switching ═══
+var WAVE_STROKE = document.documentElement.dataset.theme === 'light'
+  ? 'rgba(44,189,113,0.55)' : 'rgba(53,208,127,0.5)';
+function applyTheme(t) {
+  if (t === 'light') document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+  WAVE_STROKE = t === 'light' ? 'rgba(44,189,113,0.55)' : 'rgba(53,208,127,0.5)';
+  try { localStorage.setItem('intonation-theme', t); } catch (e) {}
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DSP CORE — pure detection engine (no DOM / WebAudio access).
+//  This exact code runs in the browser (injected into the HTML)
+//  and in the Node test harness. All timing is wall-clock ms,
+//  never frame counts, so 60 Hz and 120 Hz displays behave alike.
+//
+//  Design:
+//   - Every frame, the spectrum is explained twice: as ONE harmonic
+//     series (single) and as the best TWO-note hypothesis (pair).
+//   - Off-grid pairs (3rds/4ths/5ths/6ths…): the upper note must own
+//     an independent harmonic family with real energy.
+//   - On-grid pairs (octave/twelfth): decided by the COHERENT rise of
+//     the upper-note harmonic positions above the envelope fitted to
+//     the bass-only harmonics — a single resonance bump can't fake it.
+//     The upper note's true frequency is MEASURED (power-weighted
+//     centroid model), never assumed to be exactly 2× the bass.
+//   - The single-vs-pair margin feeds a leaky evidence integrator
+//     (Schmitt trigger): brief bad frames can't flip the mode.
+// ═══════════════════════════════════════════════════════════════
+const DSPCore = (() => {
+
+const CFG = {
+  PEAK_MIN_HZ: 55, PEAK_MAX_HZ: 5200, MAX_PEAKS: 36,
+  FLOOR_OFFSET_DB: 10,       // peak must rise this far above the median floor
+  PEAK_RANGE_DB: 55,         // and be within this of the strongest peak
+  FUND_MIN_HZ: 58, FUND_MAX_HZ: 2200,
+  TOL_BASE_CENTS: 27, TOL_H2_CENTS: 0.08, TOL_MAX_CENTS: 45,
+  RATIO_MIN: 1.055, RATIO_MAX: 4.35,
+  ONGRID_CENTS: 40,          // within this of 2:1 / 3:1 / 4:1 → on-grid analysis
+  // off-grid evidence
+  OFF_H1_REL_DB: -26,        // upper h1 must be at least this vs strongest peak
+  OFF_FRAC: [0.02, -0.6, 0.05, 0, 0.11, 1],   // indep-energy fraction → margin
+  OFF_BAL_MIN_DB: -14,       // upper family this much weaker than bass → not a double
+  // any pair hypothesis must explain (nearly) the whole spectrum
+  PAIR_RESID_FREE: 0.10, PAIR_RESID_SLOPE: 6, PAIR_RESID_MAX: 0.4,
+  // common-subharmonic ghost probe (kills "h2+h3 of one note" pairs)
+  GHOST_PW_FRAC: 0.05,
+  // on-grid evidence
+  GRID_ZERO_DB: 2.2, GRID_SPAN_DB: 1.8,
+  GRID_ZERO_MULT3_EXTRA: 0.8,   // twelfths: body-resonance regions fake h3 lifts
+  GRID_RESID_FREE: 0.08, GRID_RESID_SLOPE: 6,
+  GRID_EMA_TAU_MS: 400,
+  // Amplitude structure alone can NEVER prove an octave — real body
+  // resonances carve ±10dB into single-note spectra. Entry additionally
+  // requires shared-slot frequencies pulled OFF the bass grid (a single
+  // note's harmonics sit dead on it)…
+  DEV_MIN_CENTS: 1.25, GRID_SPECTRAL_CAP: 0.30,
+  // …or the beat LADDER: a hidden upper note beats at Δ on slot h·mult and
+  // at exactly 2Δ on slot 2·mult — independent bow-pressure wobble can't
+  // fake that rate doubling. The 2:1 ratio is physically exact; tolerance
+  // only covers measurement quantisation.
+  LADDER_RATE_TOL: 0.25,
+  // low fundamentals radiate weakly (violin G string, cello C through a
+  // phone mic) — a DENSE comb may stand in for a missing h1 below this
+  BASS_NOH1_MAX_HZ: 220,
+  // weak-evidence dead zone: margins below this are too flimsy to ENTER on,
+  // and sustained weak-positive evidence while in double mode slowly leaks
+  // (a mild body-resonance lift must not hold a stale double forever)
+  MARGIN_DEAD: 0.35, WEAK_LEAK: -0.2,
+  // amplitude-modulation (beating) evidence at the shared harmonic
+  AM_DEPTH_EVIDENCE: 0.30, AM_DEPTH_HOLD: 0.22, AM_EVIDENCE_MARGIN: 0.8,
+  AM_RECENT_MS: 850, AM_EMA_GATE: -0.75,
+  // gates & mode machine (ms)
+  ATTACK_GATE_MS: 250,
+  STABLE_GATE_MS: 90,
+  FLUX_STABLE_DB: 3.5,
+  T_UP_MS: 300, T_DOWN_MS: 250,
+  ENTER_AT: 0.75, EXIT_AT: 0.30,
+  CONTINUITY_BONUS: 0.15,
+  // smoothing — deliberately damped for a hardware-tuner feel: small bow
+  // fluctuations are absorbed, real note changes still snap via jump reset
+  MEDIAN_WIN_MS: 260, MEDIAN_MAX: 18, EMA_TAU_MS: 380,
+  JUMP_SEMITONES: 0.5,
+  // octave upper-note tracking (harder measurement → slower EMA)
+  EMA_TAU_GRID_MS: 550,
+  // interval identity lock
+  INTERVAL_HOLD_MS: 700,
+  // beat tracking
+  BEAT_WIN_MS: 2000, BEAT_MIN_SPAN_MS: 800, BEAT_MIN_DEPTH: 0.22,
+};
+
+const INTERVALS = [
+  { name: 'Unison',        n: 1,  d: 1 },
+  { name: 'Minor 2nd',     n: 16, d: 15 },
+  { name: 'Major 2nd',     n: 9,  d: 8 },
+  { name: 'Minor 3rd',     n: 6,  d: 5 },
+  { name: 'Major 3rd',     n: 5,  d: 4 },
+  { name: 'Perfect 4th',   n: 4,  d: 3 },
+  { name: 'Tritone',       n: 45, d: 32 },
+  { name: 'Perfect 5th',   n: 3,  d: 2 },
+  { name: 'Minor 6th',     n: 8,  d: 5 },
+  { name: 'Major 6th',     n: 5,  d: 3 },
+  { name: 'Minor 7th',     n: 16, d: 9 },
+  { name: 'Major 7th',     n: 15, d: 8 },
+  { name: 'Octave',        n: 2,  d: 1 },
+  { name: 'Minor 9th',     n: 32, d: 15 },
+  { name: 'Major 9th',     n: 9,  d: 4 },
+  { name: 'Minor 10th',    n: 12, d: 5 },
+  { name: 'Major 10th',    n: 5,  d: 2 },
+  { name: 'Perfect 11th',  n: 8,  d: 3 },
+  { name: 'Perfect 12th',  n: 3,  d: 1 },
+  { name: 'Double Octave', n: 4,  d: 1 },
+];
+for (const iv of INTERVALS) { iv.ratio = iv.n / iv.d; iv.meta = iv.n + ' : ' + iv.d; }
+
+const cents = (a, b) => 1200 * Math.log2(a / b);
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+
+// Open strings across violin / viola / cello (MIDI numbers). A note within
+// ±25¢ of one of these pitches counts as an open string — the immovable
+// anchor of a double stop.
+const OPEN_MIDI = [36, 43, 48, 50, 55, 57, 62, 69, 76];
+function isOpenFreq(f, refA) {
+  for (const m of OPEN_MIDI) {
+    const of = refA * Math.pow(2, (m - 69) / 12);
+    if (Math.abs(cents(f, of)) < 25) return true;
+  }
+  return false;
+}
+
+// piecewise-linear map: pts = [x0,y0, x1,y1, ...] with xs ascending
+function ramp(x, pts) {
+  if (x <= pts[0]) return pts[1];
+  for (let i = 2; i < pts.length; i += 2) {
+    if (x <= pts[i]) {
+      const x0 = pts[i - 2], y0 = pts[i - 1], x1 = pts[i], y1 = pts[i + 1];
+      return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+    }
+  }
+  return pts[pts.length - 1];
+}
+
+// ── Spectral peaks (adaptive floor, parabolic interpolation) ──
+function findPeaks(spec, binHz) {
+  const lo = Math.max(2, Math.floor(CFG.PEAK_MIN_HZ / binHz));
+  const hi = Math.min(spec.length - 2, Math.ceil(CFG.PEAK_MAX_HZ / binHz));
+  const fl = [];
+  for (let i = lo; i <= hi; i += 3) fl.push(spec[i]);
+  fl.sort((a, b) => a - b);
+  const floorDb = fl.length ? fl[fl.length >> 1] : -100;
+  let maxDb = -Infinity;
+  for (let i = lo; i <= hi; i++) if (spec[i] > maxDb) maxDb = spec[i];
+  const thr = Math.max(floorDb + CFG.FLOOR_OFFSET_DB, maxDb - CFG.PEAK_RANGE_DB);
+  const raw = [];
+  for (let i = lo; i <= hi; i++) {
+    const b = spec[i];
+    if (b <= thr) continue;
+    if (b <= spec[i - 1] || b < spec[i + 1]) continue;
+    const a = spec[i - 1], c = spec[i + 1];
+    const den = a - 2 * b + c;
+    let p = den !== 0 ? 0.5 * (a - c) / den : 0;
+    p = clamp(p, -0.5, 0.5);
+    const db = b - 0.25 * (a - c) * p;
+    raw.push({ freq: (i + p) * binHz, db, lin: Math.pow(10, db / 20) });
+  }
+  raw.sort((x, y) => y.db - x.db);
+  // drop near-duplicates (spectral ripple inside one mainlobe)
+  const peaks = [];
+  for (const p of raw) {
+    let dup = false;
+    for (const q of peaks) {
+      if (Math.abs(cents(p.freq, q.freq)) < 16) { dup = true; break; }
+    }
+    if (!dup) peaks.push(p);
+    if (peaks.length >= CFG.MAX_PEAKS) break;
+  }
+  return { peaks, floorDb, maxDb };
+}
+
+// ── HPS (log-domain sum) fundamental candidates ──
+function hpsCandidates(spec, binHz) {
+  const lo = Math.max(2, Math.floor(CFG.FUND_MIN_HZ / binHz));
+  const hi = Math.min(Math.floor(spec.length / 5) - 2, Math.ceil(1300 / binHz));
+  if (hi <= lo) return [];
+  const buf = new Float32Array(hi + 2);
+  for (let i = lo; i <= hi; i++) {
+    let s = 0;
+    for (let h = 1; h <= 5; h++) s += Math.max(-95, spec[i * h]);
+    buf[i] = s;
+  }
+  const cands = [];
+  for (let i = lo + 1; i < hi; i++) {
+    if (buf[i] > buf[i - 1] && buf[i] >= buf[i + 1]) cands.push({ freq: i * binHz, s: buf[i] });
+  }
+  cands.sort((a, b) => b.s - a.s);
+  return cands.slice(0, 6).map(c => c.freq);
+}
+
+function maxHFor(f0) { return f0 < 90 ? 22 : f0 < 120 ? 16 : f0 < 250 ? 14 : f0 < 600 ? 10 : 8; }
+function gcd(a, b) { while (b) { const t = a % b; a = b; b = t; } return a; }
+function tolFor(h) {
+  return Math.min(CFG.TOL_MAX_CENTS, CFG.TOL_BASE_CENTS + CFG.TOL_H2_CENTS * h * h);
+}
+
+// ── Match one harmonic comb against the peak list ──
+function combMatch(f0, peaks) {
+  const maxH = maxHFor(f0);
+  const used = new Set();
+  const matched = [];
+  let pw = 0, oddPw = 0;
+  for (let h = 1; h <= maxH; h++) {
+    const tgt = f0 * h;
+    if (tgt > CFG.PEAK_MAX_HZ) break;
+    const tol = tolFor(h);
+    let bi = -1, bd = tol;
+    for (let i = 0; i < peaks.length; i++) {
+      if (used.has(i)) continue;
+      const dc = Math.abs(cents(peaks[i].freq, tgt));
+      if (dc < bd) { bd = dc; bi = i; }
+    }
+    if (bi >= 0) {
+      used.add(bi);
+      const p = peaks[bi];
+      const e = p.lin * p.lin;
+      matched.push({ h, idx: bi, freq: p.freq, db: p.db, lin: p.lin, dev: cents(p.freq, tgt) });
+      pw += e;
+      if (h % 2 === 1) oddPw += e;
+    }
+  }
+  const h1 = matched.length && matched[0].h === 1 ? matched[0] : null;
+  // comb density: fraction of the first few harmonic slots actually filled.
+  // A subharmonic ghost (f0/2, f0/3 of a real note) matches only every 2nd
+  // or 3rd slot and gets a low density — that's what kills it.
+  const hAvail = Math.max(1, Math.min(maxH, Math.floor(CFG.PEAK_MAX_HZ / f0), 10));
+  let filled = 0;
+  for (const m of matched) if (m.h <= hAvail) filled++;
+  const density = filled / hAvail;
+  return { f0, matched, pw, oddPw, h1, count: matched.length, used, density };
+}
+
+// Refine f0 from the median cents deviation of its low harmonics.
+function refineF0(comb) {
+  const devs = [];
+  for (const m of comb.matched) if (m.h <= 6) devs.push(m.dev / 1);
+  if (!devs.length) return comb.f0;
+  devs.sort((a, b) => a - b);
+  const med = devs.length % 2 ? devs[devs.length >> 1]
+                              : 0.5 * (devs[devs.length / 2 - 1] + devs[devs.length / 2]);
+  return comb.f0 * Math.pow(2, med / 1200);
+}
+
+// Acceptable as a note's fundamental? h1 must exist — except low notes
+// whose fundamental barely radiates (violin G string, cello C2, phone
+// mics cutting lows), where a DENSE comb with odd-harmonic support is
+// accepted instead. A subharmonic ghost can't pass: its comb is sparse.
+function bassOk(c) {
+  if (c.h1) return true;
+  if (!(c.f0 < CFG.BASS_NOH1_MAX_HZ && c.count >= 5 && c.density >= 0.55 &&
+        c.oddPw > 0.12 * c.pw)) return false;
+  // Odd-slot density: a real missing-fundamental note still fills h3,h5,
+  // h7,h9. A subharmonic ghost of an interval (e.g. D3 under a D4+A4
+  // fifth) only hits a couple of them.
+  let have = 0, avail = 0;
+  for (const h of [3, 5, 7, 9]) {
+    if (c.f0 * h <= CFG.PEAK_MAX_HZ) {
+      avail++;
+      for (const m of c.matched) if (m.h === h) { have++; break; }
+    }
+  }
+  return avail > 0 && have / avail >= 0.6;
+}
+
+function collectCandidates(peaks, spec, binHz) {
+  const out = [];
+  const push = f => {
+    if (!(f >= CFG.FUND_MIN_HZ && f <= CFG.FUND_MAX_HZ)) return;
+    for (const g of out) if (Math.abs(cents(f, g)) < 22) return;
+    out.push(f);
+  };
+  // strongest peaks first (accurately located), then HPS, then subharmonics
+  for (const p of peaks.slice(0, 8)) push(p.freq);
+  for (const f of hpsCandidates(spec, binHz)) {
+    // snap coarse HPS bins to a real nearby peak when one exists
+    let best = f, bd = 55;
+    for (const p of peaks) {
+      const dc = Math.abs(cents(p.freq, f));
+      if (dc < bd) { bd = dc; best = p.freq; }
+    }
+    push(best);
+  }
+  for (const p of peaks.slice(0, 4)) { push(p.freq / 2); push(p.freq / 3); }
+  return out.slice(0, 12);
+}
+
+// A "pair" like (2g, 3g) can actually be harmonics 2+3 of ONE real note g.
+// The tell: real energy on g's ghost slots (k not a multiple of either voice
+// index) — a true double stop leaves those slots empty.
+function subharmonicGhost(a, b, peaks, unionPw) {
+  const ratio = b.f0r / a.f0r;
+  let fit = null;
+  outer:
+  for (let d = 2; d <= 5; d++) {
+    for (let n = d + 1; n <= 9; n++) {
+      if (gcd(n, d) !== 1) continue;
+      if (Math.abs(1200 * Math.log2(ratio / (n / d))) < 40) { fit = { n, d }; break outer; }
+    }
+  }
+  if (!fit) return { ghost: false, fit: null };
+  const g = a.f0r / fit.d;
+  if (g < 55) return { ghost: false, fit: null };
+  const maxK = Math.min(24, Math.floor(CFG.PEAK_MAX_HZ / g));
+  let ghostPw = 0;
+  for (let k = 1; k <= maxK; k++) {
+    if (k % fit.d === 0 || k % fit.n === 0) continue;
+    const tgt = g * k;
+    const tol = tolFor(k);
+    for (let i = 0; i < peaks.length; i++) {
+      if (a.used.has(i) || b.used.has(i)) continue;
+      if (Math.abs(cents(peaks[i].freq, tgt)) < tol) {
+        ghostPw += peaks[i].lin * peaks[i].lin;
+        break;
+      }
+    }
+  }
+  return { ghost: ghostPw > CFG.GHOST_PW_FRAC * unionPw, fit };
+}
+
+// ── Off-grid pair (3rds, 4ths, 5ths, 6ths, 10ths…) ──
+function evalOffGridPair(a, b, peaks, totalPw, maxDb) {
+  let indepPw = 0, indepCount = 0, h1Indep = false;
+  for (const m of b.matched) {
+    if (a.used.has(m.idx)) continue;
+    indepPw += m.lin * m.lin;
+    indepCount++;
+    if (m.h === 1) h1Indep = true;
+  }
+  if (!b.h1 || !h1Indep || indepCount < 2) return null;
+  const h1RelDb = b.h1.db - maxDb;
+  if (h1RelDb < CFG.OFF_H1_REL_DB) return null;
+  const frac = indepPw / Math.max(totalPw, 1e-12);
+  const mFrac = ramp(frac, CFG.OFF_FRAC);
+  const mProm = ramp(h1RelDb, [-26, 0, -15, 1]);
+  let margin = Math.min(mFrac, mProm);
+  const balDb = 10 * Math.log10((indepPw + 1e-15) / (a.pw + 1e-15));
+  if (balDb < CFG.OFF_BAL_MIN_DB) margin = Math.min(margin, -0.2);
+  // The pair must explain (nearly) everything. Two harmonics of one real
+  // note can masquerade as a "pair" (e.g. h3+h4), but they leave the true
+  // fundamental & friends unexplained — penalise & reject.
+  const unionPw = a.pw + indepPw;
+  const resid = Math.max(0, 1 - unionPw / Math.max(totalPw, 1e-12));
+  if (resid > CFG.PAIR_RESID_MAX) return null;
+  const sg = subharmonicGhost(a, b, peaks, unionPw);
+  if (sg.ghost) return null;
+  margin -= Math.max(0, (resid - CFG.PAIR_RESID_FREE) * CFG.PAIR_RESID_SLOPE);
+  margin = clamp(margin, -1, 1);
+  // When the ratio fits 3:2 or 4:3 and the sub-fundamental's tell-tale
+  // slots are silent (nothing to refute with), a weak-fundamental single
+  // note's h2+h3 / h3+h4 is spectrally IDENTICAL to this pair. Flag it —
+  // processFrame resolves the ambiguity over time: partials of one string
+  // hold the exact ratio (<0.1¢), two independent strings drift.
+  const pqFit = sg.fit && sg.fit.d <= 3 && sg.fit.n <= 4 ? sg.fit : null;
+  return { type: 'off', margin, pw: unionPw, fLo: a.f0r, fHi: b.f0r, a, b, pqFit };
+}
+
+// ── On-grid pair (octave 2:1 / twelfth 3:1 / double octave 4:1) ──
+// Envelope is fitted on the bass's OWN harmonics (those NOT shared with the
+// upper note); the shared positions are then tested for a coherent rise.
+function evalOnGridPair(a, mult, peaks, totalPw) {
+  const own = [];
+  for (const m of a.matched) {
+    if (m.h % mult !== 0) own.push(m);
+  }
+  if (own.length < 3) return null;
+  // The bass frequency must come from its OWN harmonics only — the shared
+  // positions are pulled toward the (possibly detuned) upper note.
+  const ownDevs = [];
+  for (const m of own) if (m.h <= 9) ownDevs.push(m.dev);
+  ownDevs.sort((x, y) => x - y);
+  const ownMed = ownDevs.length ?
+    (ownDevs.length % 2 ? ownDevs[ownDevs.length >> 1]
+                        : 0.5 * (ownDevs[ownDevs.length / 2 - 1] + ownDevs[ownDevs.length / 2])) : 0;
+  // devs are relative to a.f0 (the comb-match base), NOT the re-refined f0r
+  const fLo = a.f0 * Math.pow(2, ownMed / 1200);
+  // linear regression: db vs ln(h), with one robust refit pass that drops
+  // own-harmonics sitting far ABOVE the line (body-resonance outliers)
+  function fitLine(pts) {
+    let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (const m of pts) {
+      const x = Math.log(m.h), y = m.db;
+      sx += x; sy += y; sxx += x * x; sxy += x * y;
+    }
+    const n = pts.length;
+    const den = n * sxx - sx * sx;
+    if (Math.abs(den) < 1e-9) return null;
+    const slope = (n * sxy - sx * sy) / den;
+    return { slope, icept: (sy - slope * sx) / n };
+  }
+  let line = fitLine(own) || { slope: -9, icept: own[0].db };
+  // two-sided outlier rejection: an upward bump (body resonance) OR a
+  // crushed harmonic (phone-mic low-cut killing h1) both wreck the fit
+  const kept = own.filter(m => Math.abs(m.db - (line.slope * Math.log(m.h) + line.icept)) < 5.5);
+  if (kept.length >= 3 && kept.length < own.length) {
+    const line2 = fitLine(kept);
+    if (line2) line = line2;
+  }
+  const predict = h => line.slope * Math.log(h) + line.icept;
+
+  // measure the shared (upper-note) positions: the STRONGEST peak within
+  // ±55¢ of each slot (a detuned upper note may sit beside the bass's
+  // own weaker harmonic — nearest-peak would find the wrong one)
+  const testH = [];
+  for (let k = 1; k <= 4; k++) {
+    const h = mult * k;
+    const tgt = fLo * h;
+    if (tgt > CFG.PEAK_MAX_HZ) break;
+    let bi = -1, bdb = -Infinity;
+    for (let i = 0; i < peaks.length; i++) {
+      if (Math.abs(cents(peaks[i].freq, tgt)) < 55 && peaks[i].db > bdb) {
+        bdb = peaks[i].db; bi = i;
+      }
+    }
+    if (bi >= 0) {
+      const p = peaks[bi];
+      testH.push({ h, k, idx: bi, freq: p.freq, db: p.db, lin: p.lin, dev: cents(p.freq, tgt) });
+    }
+  }
+  if (testH.length < 2) return null;
+
+  // median of the excesses — a SINGLE bumped slot (body resonance) cannot
+  // move the median, but a true upper note lifts every slot coherently
+  const exArr = testH.map(m => m.db - predict(m.h)).sort((x, y) => x - y);
+  const exMed = exArr.length % 2 ? exArr[exArr.length >> 1]
+                                 : 0.5 * (exArr[exArr.length / 2 - 1] + exArr[exArr.length / 2]);
+  let exMean = 0;
+  for (const e of exArr) exMean += e;
+  exMean /= exArr.length;
+  let exVar = 0;
+  for (const e of exArr) exVar += (e - exMean) * (e - exMean);
+  const sd = Math.sqrt(exVar / exArr.length);
+  let evidence = exMed - 0.4 * sd;
+  // High notes offer few harmonics — with only 3-4 envelope points the fit
+  // is loose and random ±2dB draws can fake a coherent rise. Demand more.
+  if (own.length < 5) evidence -= 1.2;
+  else if (own.length < 7) evidence -= 0.5;
+
+  // A true octave boosts ALL even slots — mult=4 must additionally prove
+  // that the in-between even slots (h2, h6) are NOT boosted, otherwise
+  // this is really a 2:1 pair and the 4:1 hypothesis must stand down.
+  if (mult === 4) {
+    const mids = [];
+    for (const h of [2, 6]) {
+      const tgt = fLo * h;
+      if (tgt > CFG.PEAK_MAX_HZ) break;
+      let bdb = -Infinity;
+      for (let i = 0; i < peaks.length; i++) {
+        if (Math.abs(cents(peaks[i].freq, tgt)) < 55 && peaks[i].db > bdb) bdb = peaks[i].db;
+      }
+      if (bdb > -Infinity) mids.push(bdb - predict(h));
+    }
+    if (mids.length) {
+      const midMax = Math.max(...mids);
+      if (midMax > Math.max(2, 0.5 * exMed)) return null;
+    }
+  }
+  // Same idea for mult=3 (twelfth) vs an octave: h2/h4 must not be boosted.
+  if (mult === 3) {
+    const mids = [];
+    for (const h of [2, 4]) {
+      const tgt = fLo * h;
+      if (tgt > CFG.PEAK_MAX_HZ) break;
+      let bdb = -Infinity;
+      for (let i = 0; i < peaks.length; i++) {
+        if (Math.abs(cents(peaks[i].freq, tgt)) < 55 && peaks[i].db > bdb) bdb = peaks[i].db;
+      }
+      if (bdb > -Infinity) mids.push(bdb - predict(h));
+    }
+    if (mids.length) {
+      const midMax = Math.max(...mids);
+      if (midMax > Math.max(2.5, 0.6 * exMed)) return null;
+    }
+  }
+
+  // a pair hypothesis that leaves other strong peaks unexplained is penalised
+  // (a FIFTH boosts the bass's 3rd harmonic like a twelfth does, but the
+  //  fifth's own fundamental would be left unexplained by the 3:1 hypothesis)
+  let gridPw = a.pw;
+  for (const m of testH) if (!a.used.has(m.idx)) gridPw += m.lin * m.lin;
+  const resid = Math.max(0, 1 - gridPw / Math.max(totalPw, 1e-12));
+  const zero = CFG.GRID_ZERO_DB + (mult === 3 ? CFG.GRID_ZERO_MULT3_EXTRA : 0);
+  let margin = clamp((evidence - zero) / CFG.GRID_SPAN_DB, -1, 1);
+  margin -= Math.max(0, (resid - CFG.GRID_RESID_FREE) * CFG.GRID_RESID_SLOPE);
+  margin = clamp(margin, -1, 1);
+
+  // ── Measure the upper note's true frequency ──
+  // At each shared position the observed peak is bass-harmonic ⊕ upper-
+  // harmonic. Using the envelope's prediction for the bass share, the
+  // power-weighted centroid model gives the upper note's deviation:
+  //   devObserved ≈ wUp · devUpper  →  devUpper = devObserved / wUp
+  const est = [];
+  for (const m of testH) {
+    const predLin2 = Math.pow(10, predict(m.h) / 10);
+    const obsLin2 = Math.pow(10, m.db / 10);
+    const upPw = Math.max(0, obsLin2 - predLin2);
+    const wUp = upPw / obsLin2;
+    if (wUp < 0.35) continue;
+    est.push({ v: clamp(m.dev / Math.max(wUp, 0.35), -70, 70), w: upPw / m.k });
+  }
+  let eps = 0;
+  if (est.length) {
+    est.sort((p, q) => p.v - q.v);
+    let tw = 0; for (const e of est) tw += e.w;
+    let acc = 0;
+    for (const e of est) { acc += e.w; if (acc >= tw / 2) { eps = e.v; break; } }
+  }
+  const fHi = fLo * mult * Math.pow(2, eps / 1200);
+  // devOk: the shared slots are measurably pulled OFF the bass grid in a
+  // consistent direction — a single note (whose harmonics sit dead on the
+  // grid, within string-stiffness noise) cannot produce this.
+  let devOk = false;
+  if (Math.abs(eps) >= CFG.DEV_MIN_CENTS && est.length >= 2) {
+    let agree = 0;
+    for (const e of est) if (e.v * eps > 0 && Math.abs(e.v) >= CFG.DEV_MIN_CENTS * 0.6) agree++;
+    devOk = agree >= 2;
+  }
+  return { type: 'grid', mult, margin, pw: gridPw, fLo, fHi, a, evidence, devOk, eps, epsN: est.length };
+}
+
+// ── YIN (unchanged from the shipped version — single-note refinement) ──
+function yin(buf, sr) {
+  const W = buf.length, half = W >> 1, d = new Float32Array(half);
+  for (let t = 1; t < half; t++) {
+    let s = 0;
+    for (let i = 0; i < half; i++) { const x = buf[i] - buf[i + t]; s += x * x; }
+    d[t] = s;
+  }
+  const cmnd = new Float32Array(half); cmnd[0] = 1; let run = 0;
+  for (let t = 1; t < half; t++) { run += d[t]; cmnd[t] = d[t] * t / run; }
+  let tau = -1;
+  for (let t = 2; t < half; t++) {
+    if (cmnd[t] < 0.12) {
+      while (t + 1 < half && cmnd[t + 1] < cmnd[t]) t++;
+      tau = t; break;
+    }
+  }
+  if (tau === -1) return -1;
+  if (tau > 0 && tau < half - 1) {
+    const s0 = cmnd[tau - 1], s1 = cmnd[tau], s2 = cmnd[tau + 1];
+    const den2 = 2 * (2 * s1 - s2 - s0);
+    if (den2 !== 0) tau = tau + (s2 - s0) / den2;
+  }
+  return sr / tau;
+}
+
+// ── Per-frame joint analysis ──
+function analyzeFrame(peaks, spec, binHz, maxDb, prevPair) {
+  if (!peaks.length) return { kind: 'none' };
+  let totalPw = 0;
+  for (const p of peaks) totalPw += p.lin * p.lin;
+
+  const combs = [];
+  for (const f of collectCandidates(peaks, spec, binHz)) {
+    let c = combMatch(f, peaks);
+    if (c.count < 2) continue;
+    const fr = refineF0(c);
+    if (Math.abs(cents(fr, f)) > 4) c = combMatch(fr, peaks);
+    if (c.count < 2) continue;
+    c.f0r = refineF0(c);
+    if (c.pw < 0.02 * totalPw) continue;
+    combs.push(c);
+  }
+  if (!combs.length) return { kind: 'none' };
+
+  // Single hypothesis: best (power × density) comb. Density demotes
+  // subharmonic ghosts, power demotes harmonic (h2/h3) ghosts.
+  let single = null, singleScore = -1;
+  for (const c of combs) {
+    if (!bassOk(c)) continue;
+    const score = c.pw * (0.45 + 0.55 * c.density);
+    if (score > singleScore) { singleScore = score; single = c; }
+  }
+  if (!single) single = combs.reduce((x, y) => (y.pw > x.pw ? y : x));
+  const singleUnexpl = Math.max(0, 1 - single.pw / totalPw);
+
+  let bestOff = null;
+  const grids = [];
+  const bonus = res => {
+    if (res && prevPair && samePair(prevPair, res)) {
+      res.margin = clamp(res.margin + CFG.CONTINUITY_BONUS, -1, 1);
+    }
+    return res;
+  };
+  for (const a of combs) {
+    if (!bassOk(a)) continue;
+    // Ghost-bass guard: if `a` sits ON a harmonic of a strong lower comb
+    // (a ≈ m·c), then "a plus its multiples" are really just c's harmonics
+    // — a G string's h3+h9 must not masquerade as a D+A twelfth.
+    let ghostBass = false;
+    for (const c of combs) {
+      if (c === a || !bassOk(c) || c.pw < 0.6 * a.pw) continue;
+      for (let m = 2; m <= 4; m++) {
+        if (Math.abs(cents(a.f0r, m * c.f0r)) < 40) { ghostBass = true; break; }
+      }
+      if (ghostBass) break;
+    }
+    if (!ghostBass) {
+      for (const mult of [2, 3, 4]) {
+        const g = bonus(evalOnGridPair(a, mult, peaks, totalPw));
+        if (g) grids.push(g);
+      }
+    }
+    for (const b of combs) {
+      if (b === a) continue;
+      const r = b.f0r / a.f0r;
+      if (r < CFG.RATIO_MIN || r > CFG.RATIO_MAX) continue;
+      if (Math.abs(cents(b.f0r, 2 * a.f0r)) < CFG.ONGRID_CENTS) continue;
+      if (Math.abs(cents(b.f0r, 3 * a.f0r)) < CFG.ONGRID_CENTS) continue;
+      if (Math.abs(cents(b.f0r, 4 * a.f0r)) < CFG.ONGRID_CENTS) continue;
+      const o = bonus(evalOffGridPair(a, b, peaks, totalPw, maxDb));
+      if (o && (!bestOff || o.margin > bestOff.margin ||
+                (o.margin === bestOff.margin && o.pw > bestOff.pw))) bestOff = o;
+    }
+  }
+  return { kind: 'ok', single, singleUnexpl, offPair: bestOff, grids, totalPw };
+}
+
+function samePair(prev, res) {
+  if (prev.type !== res.type) return false;
+  if (res.type === 'grid' && prev.mult !== res.mult) return false;
+  return Math.abs(cents(res.fLo, prev.fLo)) < 60;
+}
+
+// ── Fast-FFT spectral flux → wall-clock stability ──
+function updateStability(state, fastSpec, fastFftSize, sr, dt) {
+  const binHz = sr / fastFftSize;
+  const lo = Math.floor(80 / binHz), hi = Math.min(fastSpec.length - 1, Math.floor(4000 / binHz));
+  if (!state.prevFast || state.prevFast.length !== fastSpec.length) {
+    state.prevFast = new Float32Array(fastSpec.length);
+    state.prevFast.set(fastSpec);
+    state.stableMs = 0;
+    return;
+  }
+  let sum = 0, cnt = 0;
+  for (let i = lo; i <= hi; i++) {
+    const cur = fastSpec[i], prev = state.prevFast[i];
+    if (cur > -70 || prev > -70) { sum += Math.abs(cur - prev); cnt++; }
+  }
+  state.prevFast.set(fastSpec);
+  const meanChange = cnt > 0 ? sum / cnt : 99;
+  if (meanChange < CFG.FLUX_STABLE_DB) state.stableMs += dt;
+  else state.stableMs = 0;
+}
+
+// ── Time-based smoothing: median window + VELOCITY-ADAPTIVE EMA ──
+// One-Euro-style damping: when the pitch is statistically stationary the
+// display is heavily damped (hardware-tuner calm); when it TRENDS (a peg
+// being turned) the time constant collapses so the needle keeps up and the
+// player doesn't overshoot. Oscillation (vibrato/jitter) cancels out in the
+// endpoint-trend estimate, so it never un-damps the display.
+function mkSm() { return { buf: [], ema: null }; }
+function smooth(sm, v, nowMs, dt) {
+  sm.buf.push({ t: nowMs, v });
+  while (sm.buf.length > CFG.MEDIAN_MAX ||
+         (sm.buf.length && nowMs - sm.buf[0].t > CFG.MEDIAN_WIN_MS)) sm.buf.shift();
+  // trend velocity in cents/s across the window endpoints
+  let velC = 0;
+  const first = sm.buf[0], last = sm.buf[sm.buf.length - 1];
+  const spanMs = last.t - first.t;
+  if (spanMs > 70) velC = (last.v - first.v) * 100 * 1000 / spanMs;
+  const speed = Math.max(0, Math.abs(velC) - 6);   // deadband: jitter stays damped
+  // while moving, also shorten the median window (a long window lags a ramp)
+  const winMs = speed > 20 ? 50 : speed > 6 ? 95 : CFG.MEDIAN_WIN_MS;
+  const arr = [];
+  for (const e of sm.buf) if (nowMs - e.t <= winMs) arr.push(e.v);
+  arr.sort((a, b) => a - b);
+  const med = arr.length % 2 ? arr[arr.length >> 1]
+                             : 0.5 * (arr[arr.length / 2 - 1] + arr[arr.length / 2]);
+  if (sm.ema === null || Math.abs(med - sm.ema) > CFG.JUMP_SEMITONES) sm.ema = med;
+  else {
+    const tauEff = Math.max(speed > 20 ? 45 : 60, sm.tau0 / (1 + speed / 5));
+    sm.ema += (1 - Math.exp(-dt / tauEff)) * (med - sm.ema);
+  }
+  return sm.ema;
+}
+function resetSm(sm) { sm.buf.length = 0; sm.ema = null; }
+
+// ── Interval identification with identity lock ──
+function nearestInterval(ratio) {
+  let best = null, bd = 46;
+  for (const iv of INTERVALS) {
+    const d = Math.abs(1200 * Math.log2(ratio / iv.ratio));
+    if (d < bd) { bd = d; best = iv; }
+  }
+  return best;
+}
+function lockedInterval(state, ratio, nowMs) {
+  const iv = nearestInterval(ratio);
+  if (!iv) { state.ivCand = null; return state.ivLock; }
+  if (state.ivLock && iv.name === state.ivLock.name) { state.ivCand = null; return state.ivLock; }
+  if (!state.ivLock) { state.ivLock = iv; state.ivCand = null; return iv; }
+  if (state.ivCand && state.ivCand.name === iv.name) {
+    if (nowMs - state.ivCandSince >= CFG.INTERVAL_HOLD_MS) {
+      state.ivLock = iv; state.ivCand = null;
+    }
+  } else { state.ivCand = iv; state.ivCandSince = nowMs; }
+  return state.ivLock;
+}
+
+// ── Beating at the shared harmonics (octave/twelfth/double-octave) ──
+// The merged peak's amplitude oscillates at exactly the detune rate.
+// A single note's h2 does NOT beat — so modulation depth is itself
+// evidence of a hidden second note, and the rate is the beat frequency.
+// Histories are kept PER (bass, mult) so that hypothesis-identity churn
+// can never wipe a maturing measurement.
+function pushBeatFrame(state, peaks, bassF, nowMs, dt) {
+  // STICKY anchor: a momentary flip of the single-best comb (a beating,
+  // structured spectrum can briefly re-rank candidates) must not wipe two
+  // seconds of beat history. Only a sustained (>500ms) disagreement moves
+  // the anchor.
+  if (state.beatBass === null) {
+    state.beatBass = bassF;
+    state.beatBassMissMs = 0;
+    state.beatHists = { 2: [], 3: [], 4: [], 6: [], 8: [], 9: [] };
+  } else if (Math.abs(cents(bassF, state.beatBass)) > 60) {
+    state.beatBassMissMs += dt;
+    if (state.beatBassMissMs > 500) {
+      state.beatBass = bassF;
+      state.beatBassMissMs = 0;
+      state.beatHists = { 2: [], 3: [], 4: [], 6: [], 8: [], 9: [] };
+    } else {
+      bassF = state.beatBass;   // keep measuring the established anchor
+    }
+  } else {
+    state.beatBassMissMs = 0;
+  }
+  // Slot amplitudes are recorded RELATIVE to a reference built from the
+  // bass's harmonics h1, h5, h7 — coprime to every grid mult (2,3,4,6,8),
+  // so NO pair hypothesis ever beats there. Attack ramps, crescendi and
+  // bow dynamics move reference and slots together and cancel out, while
+  // beating on the shared slots can never leak into the reference.
+  let framePw = 0;
+  for (let i = 0; i < peaks.length; i++) framePw += peaks[i].lin * peaks[i].lin;
+  let refPw = 0;
+  for (const rh of [1, 5, 7]) {
+    const tgt = bassF * rh;
+    if (tgt > CFG.PEAK_MAX_HZ) break;
+    let best = -1, bd = 50;
+    for (let i = 0; i < peaks.length; i++) {
+      const dc = Math.abs(cents(peaks[i].freq, tgt));
+      if (dc < bd) { bd = dc; best = i; }
+    }
+    if (best >= 0) refPw += peaks[best].lin * peaks[best].lin;
+  }
+  const ref = Math.sqrt(Math.max(refPw, framePw * 0.02, 1e-24));
+  const out = { 2: null, 3: null, 4: null, 6: null, 8: null, 9: null };
+  for (const mult of [2, 3, 4, 6, 8, 9]) {
+    const h = state.beatHists[mult];
+    const tgt = bassF * mult;
+    if (tgt > CFG.PEAK_MAX_HZ) continue;
+    let bi = -1, bd = 50;
+    for (let i = 0; i < peaks.length; i++) {
+      const dc = Math.abs(cents(peaks[i].freq, tgt));
+      if (dc < bd) { bd = dc; bi = i; }
+    }
+    // no peak at the slot = a cancellation trough — that IS the modulation
+    // signal, so record ~zero rather than dropping the frame
+    h.push({ t: nowMs, a: bi >= 0 ? peaks[bi].lin / ref : 0 });
+    while (h.length && nowMs - h[0].t > CFG.BEAT_WIN_MS) h.shift();
+    out[mult] = beatStats(h, nowMs);
+  }
+  return out;
+}
+
+function beatStats(h, nowMs) {
+  const span = h.length ? nowMs - h[0].t : 0;
+  if (span < CFG.BEAT_MIN_SPAN_MS || h.length < 12) return null;
+  let mn = Infinity, mx = -Infinity, mean = 0, zeros = 0;
+  let mnR = Infinity, mxR = -Infinity;
+  for (const e of h) {
+    if (e.a < mn) mn = e.a;
+    if (e.a > mx) mx = e.a;
+    if (e.a === 0) zeros++;
+    mean += e.a;
+    if (nowMs - e.t <= CFG.AM_RECENT_MS) {
+      if (e.a < mnR) mnR = e.a;
+      if (e.a > mxR) mxR = e.a;
+    }
+  }
+  mean /= h.length;
+  const zeroFrac = zeros / h.length;
+  const depth = (mx - mn) / Math.max(mx, 1e-12);
+  const depthRecent = mxR > 0 ? (mxR - mnR) / mxR : 0;
+  if (depth < CFG.BEAT_MIN_DEPTH) {
+    return { hz: 0, depth, depthRecent, zeroFrac, lastRise: null, lastFall: null };
+  }
+  // hysteresis cycle detection: one trough→peak rise per beat cycle.
+  // Rate from the median inter-rise interval (robust to one bad interval).
+  // Freshness requires BOTH a recent rise and a recent fall — a one-time
+  // amplitude step (a voice released) produces only a fall, not oscillation.
+  const upThr = mean * 1.08, dnThr = mean * 0.92;
+  let ud = 0, lastRise = null, lastFall = null;
+  const riseT = [];
+  for (const e of h) {
+    if (e.a > upThr) { if (ud < 0) { riseT.push(e.t); lastRise = e.t; } ud = 1; }
+    else if (e.a < dnThr) { if (ud > 0) lastFall = e.t; ud = -1; }
+  }
+  let hz;
+  if (riseT.length >= 3) {
+    const iv = [];
+    for (let i = 1; i < riseT.length; i++) iv.push(riseT[i] - riseT[i - 1]);
+    iv.sort((x, y) => x - y);
+    const med = iv.length % 2 ? iv[iv.length >> 1]
+                              : 0.5 * (iv[iv.length / 2 - 1] + iv[iv.length / 2]);
+    hz = 1000 / med;
+  } else if (riseT.length === 2) {
+    hz = 1000 / (riseT[1] - riseT[0]);
+  } else {
+    hz = riseT.length / (span / 1000);
+  }
+  return { hz, depth, depthRecent, zeroFrac, lastRise, lastFall };
+}
+
+// ═══════════════ public interface ═══════════════
+function createState() {
+  const s = {
+    mode: 'single',
+    Edouble: 0,
+    attackAtMs: -1, wasSilent: true,
+    prevFast: null, stableMs: 0,
+    lastT: -1,
+    smSingle: mkSm(), smLo: mkSm(), smHi: mkSm(),
+    lockedPair: null,
+    ivLock: null, ivCand: null, ivCandSince: 0,
+    beatBass: null, beatBassMissMs: 0,
+    beatHists: { 2: [], 3: [], 4: [], 6: [], 8: [], 9: [] },
+    gridEma: null,
+    ladderUntil: 0, ladderBassF: null,
+    pq: null,
+    glideHist: [],
+    cmMs: 0, cmEpsEma: null, cmWander: 0,
+    pairChal: null, pairChalSince: 0,
+    anchor: 'low', anchorPend: null, anchorPendSince: 0,
+    lastYin: null,
+  };
+  s.smSingle.tau0 = CFG.EMA_TAU_MS;
+  s.smLo.tau0 = CFG.EMA_TAU_MS;
+  s.smHi.tau0 = CFG.EMA_TAU_MS;
+  return s;
+}
+
+// Call when the input is silent (below the RMS gate) so the next sound
+// counts as a fresh attack. Keeps mode/evidence for the freeze feature,
+// but discards beat histories — they would splice two strokes together.
+function noteSilence(state) {
+  state.wasSilent = true;
+  state.prevFast = null;
+  state.stableMs = 0;
+  state.beatBass = null;
+  state.beatBassMissMs = 0;
+  state.cmMs = 0; state.cmEpsEma = null; state.cmWander = 0;
+  state.beatHists = { 2: [], 3: [], 4: [], 6: [], 8: [], 9: [] };
+  state.ladderUntil = 0;
+  state.pq = null;
+  state.glideHist = [];
+}
+
+// Full reset (freeze expired / user changed settings).
+function reset(state) {
+  const fresh = createState();
+  for (const k of Object.keys(fresh)) state[k] = fresh[k];
+}
+
+// inp: { nowMs, sr, spec, fftSize, fastSpec, fastFftSize, timeBuf, refA }
+// returns { mode:'none'|'single'|'double', ... }
+function processFrame(state, inp) {
+  const dt = state.lastT < 0 ? 16.7 : clamp(inp.nowMs - state.lastT, 1, 100);
+  state.lastT = inp.nowMs;
+  if (state.wasSilent) { state.attackAtMs = inp.nowMs; state.wasSilent = false; }
+  updateStability(state, inp.fastSpec, inp.fastFftSize, inp.sr, dt);
+
+  const binHz = inp.sr / inp.fftSize;
+  const { peaks, maxDb } = findPeaks(inp.spec, binHz);
+  const res = analyzeFrame(peaks, inp.spec, binHz, maxDb, state.lockedPair);
+  if (res.kind === 'none') return { mode: 'none' };
+
+  // ── evidence integration ──
+  // Beating is tracked on the single-best bass at all three shared-harmonic
+  // slots, independent of which hypothesis currently wins — the AM history
+  // must exist BEFORE it's needed and must survive hypothesis churn.
+  // The slow EMA of the best raw grid margin gates the AM evidence: a
+  // vibrato'd single note also modulates amplitude, but its grid margin
+  // stays strongly negative on average, so the AM path never unlocks.
+  let preMax = -1;
+  for (const g of res.grids) if (g.margin > preMax) preMax = g.margin;
+  const emaAlpha = 1 - Math.exp(-dt / CFG.GRID_EMA_TAU_MS);
+  state.gridEma = state.gridEma === null ? preMax
+    : state.gridEma + emaAlpha * (preMax - state.gridEma);
+
+  const sinceAttack = inp.nowMs - state.attackAtMs;
+  // ── pitch-glide guard for the dev evidence ──
+  // While the pitch is still settling (bow attack, bow change), the long
+  // FFT smears each gliding harmonic differently — the shared slots can
+  // appear consistently pulled off-grid, faking devOk. Trust frequency-
+  // deviation evidence only once the pitch has been steady for a moment.
+  if (res.single) {
+    state.glideHist.push({ t: inp.nowMs, f: res.single.f0r });
+    while (state.glideHist.length && inp.nowMs - state.glideHist[0].t > 350) {
+      state.glideHist.shift();
+    }
+  }
+  let devTrust = sinceAttack >= 600;
+  state.pitchVel = 0;
+  if (state.glideHist.length >= 2) {
+    const g0 = state.glideHist[0], g1 = state.glideHist[state.glideHist.length - 1];
+    const gSpan = g1.t - g0.t;
+    if (gSpan > 70) state.pitchVel = cents(g1.f, g0.f) * 1000 / gSpan;   // cents/s
+    if (devTrust && Math.abs(cents(g1.f, g0.f)) > 2.5) devTrust = false;
+
+  }
+  let ams = null;
+  state._riseSustain = false;
+  if (res.grids.length && res.single && sinceAttack >= CFG.ATTACK_GATE_MS) {
+    // while locked onto a grid pair, ITS bass is the anchor — the single-
+    // best comb may flap during deep beat troughs
+    const anchorF = (state.mode === 'double' && state.lockedPair &&
+                     state.lockedPair.type === 'grid')
+      ? state.lockedPair.fLo : res.single.f0r;
+    ams = pushBeatFrame(state, peaks, anchorF, inp.nowMs, dt);
+    for (const g of res.grids) {
+      // Amplitude structure alone must never ENTER double mode: real body
+      // resonances make single-note spectra lumpy enough to fake the excess
+      // statistic. Without off-grid frequency deviation (devOk), cap the
+      // spectral margin into the dead zone. A pair we're already locked
+      // onto is exempt (a perfectly tuned octave has dev ≈ 0).
+      const isLocked = state.lockedPair && samePair(state.lockedPair, g);
+      if (!(g.devOk && devTrust) && !isLocked) {
+        g.margin = Math.min(g.margin, CFG.GRID_SPECTRAL_CAP);
+      }
+      if (state.beatBass === null || Math.abs(cents(g.fLo, state.beatBass)) > 60) continue;
+      const am = ams[g.mult];
+      if (!am) continue;
+      g.am = am;
+      const crossOf = s => s === null ? null
+        : s.lastRise === null ? s.lastFall
+        : s.lastFall === null ? s.lastRise
+        : Math.max(s.lastRise, s.lastFall);
+      const lastCross = crossOf(am);
+      const holdFresh = lastCross !== null && inp.nowMs - lastCross <= 700;
+      // CONTRAST slot: beating from a hidden upper note modulates ONLY the
+      // shared harmonics — the bass's own harmonics stay steady. Vibrato
+      // and bow wobble modulate everything, and roughly equally. So DEPTH
+      // ASYMMETRY (shared slot deep, bass-own slot shallow) is the primary
+      // pair evidence. Compare against the DEEPEST shared rung — rung 2
+      // matures twice as fast as rung 1 on slow beats.
+      const am2 = ams[g.mult * 2] || null;
+      const sharedMax = Math.max(am.depth, am2 ? am2.depth : 0);
+      const amC = ams[g.mult === 3 ? 2 : 3] || null;
+      const contrastOk = amC !== null && amC.zeroFrac < 0.3 &&
+        amC.depth < Math.min(0.5, Math.max(0.18, 0.62 * sharedMax));
+      // BEAT LADDER: a true pair beats at Δ on slot mult, 2Δ on slot
+      // 2·mult, 3Δ on slot 3·mult. Fit Δ by least squares over the LIVE
+      // rungs and demand every live rung's rate sit on k·Δ — independent
+      // bow-wobble rates never align on a 1:2:3 ladder. Slow beats (< a
+      // couple of cycles per window) can't be rated reliably — there,
+      // demand true CANCELLATION depth on rung 2 instead (it matures 2×
+      // faster than rung 1; wobble tops out near depth 0.6, beats reach
+      // 0.7-1.0).
+      const am3 = ams[g.mult * 3] || null;
+      const rungsAll = [{ k: 1, s: am }, { k: 2, s: am2 }, { k: 3, s: am3 }];
+      const rungs = rungsAll.filter(r => r.s && r.s.depth >= 0.22 && r.s.hz > 0.3);
+      // Base fit uses the two LOWEST live rungs (high rungs beat near the
+      // frame-rate measurement ceiling — they may confirm, never veto).
+      let fit2 = false, fit3 = false;
+      if (rungs.length >= 2) {
+        const r1 = rungs[0], r2 = rungs[1];
+        const ratio = r2.k / r1.k;
+        fit2 = Math.abs(r2.s.hz - ratio * r1.s.hz) <=
+               Math.max(0.35, CFG.LADDER_RATE_TOL * ratio * r1.s.hz);
+        if (fit2 && rungs.length >= 3) {
+          const r3 = rungs[2], ratio3 = r3.k / r1.k;
+          fit3 = Math.abs(r3.s.hz - ratio3 * r1.s.hz) <=
+                 Math.max(0.5, CFG.LADDER_RATE_TOL * ratio3 * r1.s.hz);
+        }
+      }
+      let maxDepth = am.depth;
+      if (am2 !== null && am2.depth > maxDepth) maxDepth = am2.depth;
+      if (am3 !== null && am3.depth > maxDepth) maxDepth = am3.depth;
+      // deep path: 0.7 — bow wobble tops out near 0.65, true beats reach
+      // 0.9-1.0. When a live third rung is measurable (< ~4.2 Hz, inside
+      // the frame-rate ceiling) it must agree; triple-confirmed ladders
+      // may be shallower (unbalanced composites).
+      const exp3 = rungs.length >= 3 ? (rungs[2].k / rungs[0].k) * rungs[0].s.hz : null;
+      const rung3Veto = rungs.length >= 3 && exp3 <= 4.2 && !fit3;
+      const ladderPath = fit2 && !rung3Veto &&
+        (maxDepth >= 0.7 || (fit3 && maxDepth >= 0.38));
+      const slowBeat = am.hz < 1.6;
+      // COMMON-MODE veto: finger sway / bow pressure modulates EVERY slot
+      // at the SAME rate (a stopped G-string note's h2 rides the steep
+      // body-resonance slope). True beating runs the ladder at 1:2:3.
+      // The equality must PERSIST (~350ms) — converging rate estimates
+      // pass through near-equality briefly and must not veto a real pair.
+      const ratesEqual = am.hz > 0.5 && am2 !== null && am2.hz > 0.5 &&
+        Math.abs(am2.hz - am.hz) <= 0.18 * Math.max(am.hz, am2.hz);
+      if (ratesEqual) state.cmMs += dt;
+      else state.cmMs = Math.max(0, state.cmMs - 2 * dt);
+      // …but ONE bow driving TWO strings also modulates both slots at the
+      // same (bow) rate. The tell is the shared-slot deviation: a single
+      // string's partials are ratio-LOCKED (eps steady), two free strings
+      // DRIFT against each other (eps wanders). Wandering pairs are exempt.
+      if (g.epsN >= 2) {
+        if (state.cmEpsEma === null) state.cmEpsEma = g.eps;
+        state.cmEpsEma += 0.08 * (g.eps - state.cmEpsEma);
+        state.cmWander += 0.08 * (Math.abs(g.eps - state.cmEpsEma) - state.cmWander);
+      }
+      const commonMode = state.cmMs > 350 && state.cmWander <= 0.28;
+      const amPath = ladderPath ||
+        (!commonMode && slowBeat && am2 !== null && am2.depth >= 0.7 && am2.zeroFrac < 0.5);
+      // freshness for CONFIRMING evidence: recent RISES only — a released
+      // voice leaves a one-time falling step and stale window data, but
+      // never a fresh rise
+      const riseFresh =
+        (am.lastRise !== null && inp.nowMs - am.lastRise <= 800) ||
+        (am2 !== null && am2.lastRise !== null && inp.nowMs - am2.lastRise <= 500) ||
+        (am3 !== null && am3.lastRise !== null && inp.nowMs - am3.lastRise <= 500);
+      const freshLadder = riseFresh;
+      const unlocked = state.gridEma > CFG.AM_EMA_GATE || contrastOk;
+      if (state.debug) {
+        state._dbg = state._dbg || {};
+        state._dbg[g.mult] = { unlocked, freshLadder, contrastOk,
+          amD: am.depth, amHz: am.hz, ladderOk: fit2, slowBeat, rungsDeep: rungs.length,
+          amC: amC ? amC.depth : -1, amCz: amC ? amC.zeroFrac : -1,
+          am2D: am2 ? am2.depth : -1, am2Hz: am2 ? am2.hz : -1,
+          ema: state.gridEma, amPath };
+      }
+      // Confirmation floors: while ENTERING, evidence gaps between beat
+      // crests are long (slow beats) — hold the candidate for 1.2s. Once
+      // IN double mode, a short floor suffices (the sustain rule below
+      // carries the steady state), and a released voice must be let go of
+      // quickly.
+      const floorMs = state.mode === 'double' ? 400 : 1200;
+      // a strong frequency-deviation confirmation also arms the floor
+      if (g.devOk && devTrust && g.margin >= 0.5) {
+        state.ladderUntil = inp.nowMs + floorMs;
+        state.ladderBassF = state.beatBass;
+      }
+      if (unlocked) {
+        if (freshLadder && contrastOk && amPath) {
+          g.margin = Math.max(g.margin, CFG.AM_EVIDENCE_MARGIN);
+          g.amBoosted = true;
+          state.ladderUntil = inp.nowMs + floorMs;
+          state.ladderBassF = state.beatBass;
+        }
+      }
+      if (inp.nowMs < state.ladderUntil && state.ladderBassF !== null &&
+          Math.abs(cents(g.fLo, state.ladderBassF)) < 60) {
+        // pair confirmed moments ago — beat-crest flutter must not
+        // drain the integrator in between confirmations
+        g.margin = Math.max(g.margin, 0.25);
+      }
+      // sustaining an established double is easier than entering: rises on
+      // the shared slots within the last 1.2s plus real depth keep it
+      // gently alive (slow beats spend seconds on a crest between rises;
+      // a RELEASED voice produces no rises at all and expires)
+      const riseSustain =
+        (am.lastRise !== null && inp.nowMs - am.lastRise <= 1200) ||
+        (am2 !== null && am2.lastRise !== null && inp.nowMs - am2.lastRise <= 1200) ||
+        (am3 !== null && am3.lastRise !== null && inp.nowMs - am3.lastRise <= 1200);
+      if (riseSustain) state._riseSustain = true;
+      if (isLocked && riseSustain && sharedMax >= 0.5) {
+        g.margin = Math.max(g.margin, 0.1);
+      }
+      // while locked onto this pair, a beating trough is not proof of single
+      if (holdFresh && isLocked &&
+          am.depth >= CFG.AM_DEPTH_HOLD && am.hz < 10) {
+        if (g.margin < -0.25) g.held = true;
+        g.margin = Math.max(g.margin, -0.25);
+      }
+      // The centroid gives the octave detune's SIGN; the beat rate gives
+      // its MAGNITUDE far more precisely than the merged peak can — but
+      // only in the small-detune regime where the peaks truly merge.
+      // At larger detunes the spectrum resolves the pair on its own and
+      // the AM tracker (limited by frame rate) must not override it.
+      const expectedBeat = Math.abs(g.fHi - g.mult * g.fLo);
+      if (expectedBeat <= 8 && am.depth >= 0.25 && am.hz > 0.05 && am.hz <= 10) {
+        const sign = g.fHi >= g.mult * g.fLo ? 1 : -1;
+        g.fHiBeat = g.mult * g.fLo + sign * am.hz;
+      }
+    }
+  }
+  // Select the grid hypothesis: best margin; among near-equals (AM boosts
+  // can saturate several mults at once) the one with the clearer RAW
+  // spectral pattern wins — a real double-octave lifts {4k} slots
+  // uniformly while its spurious mult-2 sibling lifts only half of {2k}.
+  // The locked identity is stickiest of all.
+  let gp = null;
+  if (res.grids.length) {
+    // Among AM-boosted hypotheses the SMALLEST mult is the true one: the
+    // beat ladder subsamples consistently at 2×/4×, but a true double-
+    // octave's slot 2 carries no upper fundamental and never gets boosted.
+    let boostedMin = null;
+    for (const g of res.grids) {
+      if (g.amBoosted && (!boostedMin || g.mult < boostedMin.mult)) boostedMin = g;
+    }
+    if (boostedMin) {
+      gp = boostedMin;
+    } else {
+      gp = res.grids[0];
+      for (const g of res.grids) if (g.margin > gp.margin) gp = g;
+      for (const g of res.grids) {
+        if (g === gp) continue;
+        if (g.margin >= gp.margin - 0.12 && g.evidence > gp.evidence + 1.5) gp = g;
+      }
+    }
+    if (state.lockedPair && state.lockedPair.type === 'grid') {
+      for (const g of res.grids) {
+        if (samePair(state.lockedPair, g) && g.margin >= gp.margin - 0.3) { gp = g; break; }
+      }
+    }
+  }
+  let pair = res.offPair;
+  if (gp && (!pair || gp.margin >= pair.margin)) pair = gp;
+  let margin = pair ? pair.margin : -1;
+  if (state.debug) state._dbgPair = pair ? { type: pair.type, fLo: pair.fLo, fHi: pair.fHi,
+    m0: margin, pqFit: pair.type === 'off' ? (pair.pqFit ? pair.pqFit.n + '/' + pair.pqFit.d : 'NONE') : '-' } : null;
+  // ── ratio-lock test for the ambiguous ghost-fifth/fourth ──
+  // A weak-fundamental single's h2+h3 and a real fifth can be spectrally
+  // identical. But one string's partials hold the exact 3:2 ratio to
+  // within ~0.1¢, while two independent strings drift against each other.
+  // Verify before allowing entry.
+  if (pair && pair.type === 'off' && pair.pqFit && state.mode !== 'double') {
+    const key = pair.pqFit.n + '/' + pair.pqFit.d;
+    if (!state.pq || state.pq.key !== key ||
+        Math.abs(cents(pair.fLo, state.pq.fLo)) > 60) {
+      state.pq = { key, fLo: pair.fLo, hist: [], med5: [], born: inp.nowMs };
+    }
+    const pq = state.pq;
+    const dev = cents(pair.fHi / pair.fLo, pair.pqFit.n / pair.pqFit.d);
+    pq.med5.push(dev);
+    if (pq.med5.length > 5) pq.med5.shift();
+    const srt = [...pq.med5].sort((x, y) => x - y);
+    const m5 = srt[srt.length >> 1];
+    // EMA (τ≈250ms) before measuring wander: interpolation noise (1-3Hz)
+    // is crushed 3-5×,真 two-string drift (0.1-0.4Hz) passes untouched
+    const aEma = 1 - Math.exp(-dt / 250);
+    pq.ema = pq.ema === undefined || pq.ema === null ? m5 : pq.ema + aEma * (m5 - pq.ema);
+    // The wander window must never see the slow EMA's own convergence out
+    // of the attack smear (it used to read as ~1-11c of "drift", letting
+    // one string's h2+h3 impersonate a fifth). Track a SHORT ema (t=80ms)
+    // of the median measurement — its attack tail dies within ~300ms —
+    // and admit samples only after 500ms of tracker age.
+    pq.emaF = pq.emaF === undefined ? m5 : pq.emaF + (1 - Math.exp(-dt / 80)) * (m5 - pq.emaF);
+    if (inp.nowMs - pq.born >= 500) pq.hist.push({ t: inp.nowMs, v: pq.emaF });
+    while (pq.hist.length && inp.nowMs - pq.hist[0].t > 1500) pq.hist.shift();
+    const span = pq.hist.length ? inp.nowMs - pq.hist[0].t : 0;
+    let mn = Infinity, mx = -Infinity;
+    for (const e of pq.hist) { if (e.v < mn) mn = e.v; if (e.v > mx) mx = e.v; }
+    if (state.debug) Object.assign(state._dbgPair, { ema: pq.ema, wander: mx - mn, span });
+    if (span < 1000) margin = Math.min(margin, 0);
+    // tight wander = one string, regardless of absolute offset: a body-
+    // resonance slope can pull a measured partial ~1-2c off the exact
+    // ratio (viola C-string h2 rides the air resonance), faking a
+    // "mistuned fifth". Only a clearly mistuned (>2.5c) steady pair may
+    // enter without drift.
+    else if (mx - mn < 0.8 && Math.abs(pq.ema) < 2.5) margin = Math.min(margin, 0);
+  }
+  if (sinceAttack < CFG.ATTACK_GATE_MS || state.stableMs < CFG.STABLE_GATE_MS) {
+    margin = Math.min(margin, 0);
+  }
+  // weak-evidence dead zone (see CFG.MARGIN_DEAD): too flimsy to ENTER on.
+  // In double mode weak-positive margins are left alone — every entry is
+  // now dev/AM-confirmed, and the sustain floors intentionally emit small
+  // positives that must not be re-written into a drain.
+  if (state.mode !== 'double' && margin > 0 && margin < CFG.MARGIN_DEAD) {
+    margin = 0;
+  }
+  // messy frames while already in double mode are ambiguous, not proof of single
+  if (state.mode === 'double' && margin < 0 && res.singleUnexpl > 0.15) {
+    margin = Math.max(margin, -0.25);
+  }
+  // …but a CLEAN single-note explanation with negative evidence AND dead
+  // beat activity drains fast — releasing one string of a double stop must
+  // return to single briskly. While any shared slot still produces fresh
+  // rises (an octave's beat trough), this stays out of the way.
+  if (state.mode === 'double' && margin < 0 && res.singleUnexpl < 0.08 &&
+      !(pair && pair.held) && !state._riseSustain) {
+    margin = Math.min(margin, -0.8);
+  }
+  state.Edouble = clamp(
+    state.Edouble + margin * dt / (margin > 0 ? CFG.T_UP_MS : CFG.T_DOWN_MS), 0, 1);
+
+  if (state.mode !== 'double' && state.Edouble >= CFG.ENTER_AT && pair) {
+    state.mode = 'double';
+    resetSm(state.smLo); resetSm(state.smHi);
+    state.ivLock = null; state.ivCand = null;
+  } else if (state.mode === 'double' && state.Edouble <= CFG.EXIT_AT) {
+    state.mode = 'single';
+    resetSm(state.smSingle);
+    state.lockedPair = null;
+    state.anchor = 'low'; state.anchorPend = null;
+  }
+
+  const freqToMidi = f => 69 + 12 * Math.log2(f / inp.refA);
+
+  if (state.mode === 'double' && pair) {
+    // pair identity change: the challenger must persist for 700ms before
+    // the display re-locks — hypothesis flutter must not repaint the UI
+    if (state.lockedPair && !samePair(state.lockedPair, pair)) {
+      let held = null;
+      if (state.lockedPair.type === 'grid') {
+        for (const g of res.grids) if (samePair(state.lockedPair, g)) { held = g; break; }
+      } else if (res.offPair && samePair(state.lockedPair, res.offPair)) {
+        held = res.offPair;
+      }
+      if (held) {
+        if (!state.pairChal || !samePair(state.pairChal, pair)) {
+          state.pairChal = { type: pair.type, mult: pair.mult, fLo: pair.fLo };
+          state.pairChalSince = inp.nowMs;
+        }
+        if (inp.nowMs - state.pairChalSince < 700) {
+          pair = held;               // keep showing the established pair
+        } else {
+          state.pairChal = null;     // sustained challenger wins
+        }
+      }
+    } else {
+      state.pairChal = null;
+    }
+    if (state.lockedPair && !samePair(state.lockedPair, pair)) {
+      resetSm(state.smLo); resetSm(state.smHi);
+    }
+    state.lockedPair = { type: pair.type, mult: pair.mult, fLo: pair.fLo };
+    // slower EMA for the hard on-grid upper-note measurement
+    state.smHi.tau0 = pair.type === 'grid' ? CFG.EMA_TAU_GRID_MS : CFG.EMA_TAU_MS;
+    const fHiIn = pair.fHiBeat !== undefined ? pair.fHiBeat : pair.fHi;
+    const loMidi = smooth(state.smLo, freqToMidi(pair.fLo), inp.nowMs, dt);
+    const hiMidi = smooth(state.smHi, freqToMidi(fHiIn), inp.nowMs, dt);
+    const fLoS = inp.refA * Math.pow(2, (loMidi - 69) / 12);
+    const fHiS = inp.refA * Math.pow(2, (hiMidi - 69) / 12);
+    const iv = lockedInterval(state, fHiS / fLoS, inp.nowMs);
+    // Which note is the immovable anchor? Normally the lower one — but if
+    // the UPPER note is an open string (and the lower is stopped), the open
+    // string anchors and the STOPPED lower note is the one to adjust.
+    // 300ms hysteresis keeps the roles from flapping at the ±25¢ boundary.
+    const anchorNow = (isOpenFreq(fHiS, inp.refA) && !isOpenFreq(fLoS, inp.refA))
+      ? 'high' : 'low';
+    if (anchorNow !== state.anchor) {
+      if (state.anchorPend !== anchorNow) {
+        state.anchorPend = anchorNow; state.anchorPendSince = inp.nowMs;
+      } else if (inp.nowMs - state.anchorPendSince >= 300) {
+        state.anchor = anchorNow; state.anchorPend = null;
+      }
+    } else {
+      state.anchorPend = null;
+    }
+    let beatHz = null, beatMeasured = false;
+    if (iv) {
+      const tgt = fLoS * iv.ratio;
+      if (pair.type === 'grid') {
+        const am = pair.am;
+        if (am && am.depth >= CFG.BEAT_MIN_DEPTH) { beatHz = am.hz; beatMeasured = true; }
+        else if (am) { beatHz = 0; beatMeasured = true; }
+        else beatHz = Math.abs(fHiS - tgt);
+      } else {
+        beatHz = (iv.d <= 6 ? iv.d : 1) * Math.abs(fHiS - tgt);
+      }
+    }
+    return {
+      mode: 'double',
+      loMidi, hiMidi, fLo: fLoS, fHi: fHiS,
+      interval: iv ? { name: iv.name, meta: iv.meta, ratio: iv.ratio, d: iv.d } : null,
+      beatHz, beatMeasured,
+      onGrid: pair.type === 'grid',
+      anchor: state.anchor,
+      margin, Edouble: state.Edouble,
+    };
+  }
+
+  // ── single ──
+  state.lockedPair = state.mode === 'double' ? state.lockedPair : null;
+  const fSpec = res.single.f0r;
+  // Display pitch anchored to the LOWEST harmonics (h≤3): stiff strings'
+  // upper partials run progressively sharp and would bias both YIN and a
+  // wide-comb median. Hardware tuners read the fundamental — so do we.
+  let fDisp = fSpec;
+  {
+    const d3 = [];
+    for (const m of res.single.matched) if (m.h <= 3) d3.push(m.dev);
+    if (d3.length) {
+      d3.sort((a, b) => a - b);
+      const md = d3.length % 2 ? d3[d3.length >> 1]
+                               : 0.5 * (d3[d3.length / 2 - 1] + d3[d3.length / 2]);
+      fDisp = res.single.f0 * Math.pow(2, md / 1200);
+    }
+  }
+  let freq = fDisp;
+  if (inp.timeBuf) {
+    // YIN is the most expensive step — throttle it to every ~25ms and
+    // re-run immediately when the spectral pitch jumps
+    const needYin = !state.lastYin || inp.nowMs - state.lastYin.t >= 25 ||
+                    Math.abs(cents(state.lastYin.fSpec, fSpec)) > 30;
+    if (needYin) {
+      // fast glide → shorter YIN window: half the analysis latency, so the
+      // needle trails a brisk peg turn by even less
+      const tb = Math.abs(state.pitchVel) > 25 && inp.timeBuf.length > 4096
+        ? inp.timeBuf.subarray(inp.timeBuf.length - 4096) : inp.timeBuf;
+      state.lastYin = { t: inp.nowMs, yf: yin(tb, inp.sr), fSpec };
+    }
+    const yf = state.lastYin.yf;
+    if (yf > 55 && yf < 4500) {
+      if (Math.abs(cents(yf, fDisp)) < 60) {
+        // While the pitch is GLIDING (a peg being turned) the long FFT
+        // smears ~175ms behind — trust the short-window YIN alone so the
+        // needle keeps up. When steady, average the two (halves the bias).
+        freq = Math.abs(state.pitchVel) > 12 ? yf : 0.5 * yf + 0.5 * fDisp;
+      }
+      // octave-error rescue: if the spectral pick landed on a harmonic of
+      // the true fundamental (weak-fundamental G string), the time-domain
+      // period knows the truth
+      else if (Math.abs(cents(fSpec, 2 * yf)) < 45 || Math.abs(cents(fSpec, 3 * yf)) < 45) {
+        freq = yf;
+      }
+    }
+  }
+  const rawMidi = freqToMidi(freq);
+  const midi = smooth(state.smSingle, rawMidi, inp.nowMs, dt);
+  return { mode: 'single', midi, rawMidi, freq, margin, Edouble: state.Edouble };
+}
+
+return {
+  createState, processFrame, noteSilence, reset,
+  CFG, INTERVALS,
+  _internals: { findPeaks, combMatch, refineF0, analyzeFrame, evalOnGridPair, evalOffGridPair, yin, hpsCandidates, pushBeatFrame, beatStats },
+};
+})();
+
+
+
+// ═══ Design hooks: the wide shallow VU dial (identical geometry) ═══
+const Design = (() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const CX = 180, CY = 264, R = 240;
+  const SWEEP = 36;                       // ±50¢ → ±36°
+  const dials = {};
+
+  const pol = (deg, r) => [CX + r * Math.sin(deg * Math.PI / 180), CY - r * Math.cos(deg * Math.PI / 180)];
+  const arcPath = (a0, a1, r) => {
+    const [x0, y0] = pol(a0, r), [x1, y1] = pol(a1, r);
+    return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${(a1 - a0) > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  };
+
+  function buildDial(svg) {
+    const el = (n, attrs, parent) => {
+      const e = document.createElementNS(NS, n);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      (parent || svg).appendChild(e);
+      return e;
+    };
+    el('path', { d: arcPath(-SWEEP, SWEEP, R), class: 'dial-track' });
+    const tol = el('path', { d: arcPath(-2.6, 2.6, R - 5), class: 'dial-tol' });
+    for (let c = -50; c <= 50; c += 5) {
+      const a = c / 50 * SWEEP, major = c % 10 === 0;
+      const [x0, y0] = pol(a, major ? (c === 0 ? R - 17 : R - 13) : R - 8);
+      const [x1, y1] = pol(a, R - 1);
+      el('line', { x1: x0, y1: y0, x2: x1, y2: y1,
+        class: 'dial-tick' + (major ? ' major' : '') + (c === 0 ? ' zero' : '') });
+    }
+    for (const [c, txt] of [[-50, '−50'], [-25, '−25'], [0, '0'], [25, '+25'], [50, '+50']]) {
+      const [x, y] = pol(c / 50 * SWEEP, R + 11);
+      const t = el('text', { x: x.toFixed(1), y: (y + 3).toFixed(1), class: 'dial-num', 'text-anchor': 'middle' });
+      t.textContent = txt;
+    }
+    const g = el('g', { class: 'dial-needle' });
+    el('line', { x1: CX, y1: CY, x2: CX, y2: CY - R - 2, class: 'needle-line' }, g);
+    g.style.transformBox = 'view-box';
+    g.style.transformOrigin = CX + 'px ' + CY + 'px';
+    el('path', { d: `M ${CX - 9} 84 A 9 9 0 0 1 ${CX + 9} 84 Z`, class: 'needle-hub' });
+    svg._needle = g;
+    svg._tol = tol;
+    return svg;
+  }
+
+  return {
+    init() {
+      dials.A = buildDial(document.getElementById('dialA'));
+      dials.B = buildDial(document.getElementById('dialB'));
+    },
+    tolerance(tolC) {
+      const a = Math.max(1.2, tolC) / 50 * SWEEP;
+      for (const k of ['A', 'B']) {
+        if (dials[k]) dials[k]._tol.setAttribute('d', arcPath(-a, a, R - 5));
+      }
+    },
+    meter(slot, cents, ok) {
+      const d = dials[slot];
+      if (!d) return;
+      const c = cents === null ? 0 : Math.max(-50, Math.min(50, cents));
+      d._needle.style.transform = `rotate(${(c / 50 * SWEEP).toFixed(2)}deg)`;
+      d.classList.toggle('intune', cents !== null && !!ok);
+    },
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  SHARED ADAPTER for design proposals — unified two-slot stage.
+//  Voice A (upper) is always the main/reference voice; Voice B
+//  (lower) sits dormant during single notes and lights up for
+//  double stops. NOTHING moves on mode change — only opacity.
+//  Requires: DSPCore (injected before) and a Design object with
+//    Design.init(), Design.tolerance(c), Design.meter(slot, cents, ok),
+//    Design.tick(now) [optional].
+//  Open with #demo in the URL to watch an automated show-reel
+//  without microphone access.
+// ═══════════════════════════════════════════════════════════════
+
+// ─── state ───
+let REF_A = 442;
+let TOLERANCE_CENTS = 3;
+let audioCtx = null, analyser = null, fastAnalyser = null;
+let inputTrim = null, uiActiveSince = 0;
+let micStream = null, micSource = null, micReacquiring = false, micWatchMs = 0;
+let micDead = false, zeroSinceMs = 0, lastLoopMs = 0, lastAnalysisMs = 0;
+let rmsSameCount = 0, lastRmsExact = -1;
+let ctxTimeMark = -1, ctxTimeMarkMs = 0, ctxStalled = false, recoverBanner = null;
+// In iOS HOME-SCREEN (standalone) apps WebKit never persists the mic
+// permission (bug 215884) — every fresh getUserMedia re-prompts. So there,
+// auto-recovery must NEVER call getUserMedia on its own: wait for iOS to
+// revive the track, and only prompt from an explicit user tap.
+// iPadOS Safari masquerades as a desktop Mac (no "iPad" in the UA) —
+// detect Apple touch devices via maxTouchPoints instead.
+const IS_APPLE_TOUCH = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+  ((navigator.maxTouchPoints || 0) > 1 && /Mac/.test(navigator.platform || ''));
+const IS_MOBILE_DEVICE = IS_APPLE_TOUCH || /Android/i.test(navigator.userAgent);
+// PHONES get the portrait lock; tablets (iPad incl. its Mac masquerade,
+// Android tablets) rotate freely — user decision 2026-08-29.
+const IS_PHONE = /iPhone|iPod/.test(navigator.userAgent) ||
+  (/Android/i.test(navigator.userAgent) && /Mobile/i.test(navigator.userAgent));
+const IS_IOS_STANDALONE = IS_APPLE_TOUCH &&
+  ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+   navigator.standalone === true);
+let isListening = false;
+
+let toneOsc1 = null, toneOsc2 = null, toneGainNode = null;
+let currentlyPlayingString = null;
+
+const BUF_SIZE = 8192;
+const FFT_SIZE = 16384;
+const FAST_FFT_SIZE = 2048;
+
+const NOTE_NAMES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+// One unified reference row: every open-string pitch class of violin,
+// viola and cello (C G D A E, low -> high). Octaves chosen to stay
+// speaker-friendly; string players tune across octaves by ear.
+const STRINGS = [['C',48],['G',55],['D',62],['A',69],['E',76]];
+const strMidi = i => STRINGS[i][1];
+
+let dspState = DSPCore.createState();
+let uiMode = 'boot';
+let lastSignalTime = 0, isFrozen = false, noneSinceMs = 0;
+const FREEZE_DURATION_MS = 1500;
+const RENDER_INTERVAL_MS = 90;
+let lastRenderMs = 0;
+
+const VIB_HISTORY_MS = 1000;
+let singleHistory = [], isVibratoActive = false;
+let vibratoCenter = 0, vibratoRange = { min: 0, max: 0 };
+
+function resetDetection() {
+  DSPCore.reset(dspState);
+  singleHistory = []; isVibratoActive = false;
+}
+
+const $ = id => document.getElementById(id);
+
+// ─── reference pitch & tolerance ───
+const midiToFreq = midi => REF_A * Math.pow(2, (midi - 69) / 12);
+const freqToMidi = f => 69 + 12 * Math.log2(f / REF_A);
+const midiToFreqD = m => REF_A * Math.pow(2, (m - 69) / 12);
+function midiToName(midi) {
+  const note = ((Math.round(midi) % 12) + 12) % 12, oct = Math.floor(Math.round(midi) / 12) - 1;
+  return { name: NOTE_NAMES[note], octave: oct };
+}
+
+function updateRefDisplay() {
+  $('refVal').textContent = REF_A;
+  $('stampRefVal').textContent = REF_A;
+  document.querySelectorAll('.tone-card').forEach((b, i) => {
+    const [letter, midi] = STRINGS[i];
+    const L = b.querySelector('.tone-letter'), H = b.querySelector('.tone-hz');
+    if (L) L.textContent = letter;
+    if (H) H.textContent = midiToFreq(midi).toFixed(1);
+  });
+  updatePlayingToneFreq();
+}
+function changeRef(delta) {
+  REF_A = Math.max(420, Math.min(460, REF_A + delta));
+  updateRefDisplay();
+  resetDetection();
+}
+function setupRefButton(id, delta) {
+  const btn = $(id);
+  let timer = null, accel = 1, pressed = false;
+  const start = e => {
+    e.preventDefault(); pressed = true; changeRef(delta); accel = 1;
+    let iv = 350;
+    const tick = () => { if (!pressed) return; changeRef(delta); accel *= 1.15; iv = Math.max(40, 350 / accel); timer = setTimeout(tick, iv); };
+    timer = setTimeout(tick, 500);
+  };
+  const end = e => { e && e.preventDefault(); pressed = false; if (timer) { clearTimeout(timer); timer = null; } };
+  btn.addEventListener('mousedown', start);
+  btn.addEventListener('touchstart', start, { passive: false });
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev => btn.addEventListener(ev, end));
+}
+function setTolerance(val) {
+  TOLERANCE_CENTS = val;
+  document.querySelectorAll('.tol-btn').forEach(b => b.classList.toggle('active', parseFloat(b.dataset.tol) === val));
+  Design.tolerance(TOLERANCE_CENTS);
+}
+
+// ─── reference tone generator — triangle wave (unchanged spec) ───
+let _triangleWave = null;
+function buildTriangleWave(ctx) {
+  const N = 32;
+  const real = new Float32Array(N);
+  const imag = new Float32Array(N);
+  for (let k = 1; k < N; k += 2) imag[k] = Math.pow(-1, (k + 1) / 2) / (k * k);
+  try { return ctx.createPeriodicWave(real, imag, { disableNormalization: false }); }
+  catch (e) { return null; }
+}
+// iOS quirks: Web Audio obeys the silent switch and, while the mic is
+// capturing, may route to the earpiece. Fix: keep an <audio> element
+// PLAYING A SILENT MediaStream — an active media element switches the
+// audio session to "playback", so Web Audio ignores the switch and uses
+// the main speaker. The tones themselves go out ctx.destination: playing
+// them through the element would detune them (WebKit plays MediaStreams
+// without resampling, so pitch shifts whenever sample rates mismatch).
+let toneDest = null, toneEl = null;
+async function ensureAudioCtxReady() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _triangleWave = null;
+  }
+  if (!toneDest) {
+    try {
+      toneDest = audioCtx.createMediaStreamDestination();
+      if (!toneEl) {
+        toneEl = document.createElement('audio');
+        toneEl.setAttribute('playsinline', '');
+      }
+      toneEl.srcObject = toneDest.stream;
+    } catch (e) { toneDest = null; }
+  }
+  if (audioCtx.state !== 'running') await audioCtx.resume();
+  if (!_triangleWave) _triangleWave = buildTriangleWave(audioCtx);
+}
+// recover from iOS audio-session interruptions (calls, screen lock, app switch)
+function recoverAudio() {
+  if (document.hidden) return;
+  if (audioCtx && audioCtx.state !== 'running') {
+    audioCtx.resume().catch(() => {});
+    if (currentlyPlayingString && toneEl && toneEl.paused) { const p = toneEl.play(); if (p && p.catch) p.catch(() => {}); }
+  }
+  if (isListening && micStream && !IS_IOS_STANDALONE) {
+    const t = micStream.getAudioTracks()[0];
+    if (!t || t.readyState === 'ended') reacquireMic();
+    else if (t.muted) setTimeout(() => {   // give the OS a moment to unmute on its own
+      const t2 = micStream && micStream.getAudioTracks()[0];
+      if (!document.hidden && t2 && (t2.muted || t2.readyState === 'ended')) reacquireMic();
+    }, 700);
+  }
+}
+document.addEventListener('visibilitychange', recoverAudio);
+window.addEventListener('pageshow', recoverAudio);
+window.addEventListener('focus', recoverAudio);
+
+// ─── last-resort recovery: iOS may refuse a gesture-less getUserMedia /
+// resume in home-screen apps. A dead input reads EXACT zeros (a live mic
+// always has a noise floor), so loop() detects it, tries the silent path,
+// and if that fails shows a banner — any tap then carries the user gesture
+// iOS wants, rebuilding the whole audio graph if the context is bricked.
+function showRecoverBanner(show) {
+  if (show) {
+    if (!recoverBanner) {
+      recoverBanner = document.createElement('div');
+      recoverBanner.textContent = 'MIC INTERRUPTED — TAP TO RESUME';
+      recoverBanner.style.cssText =
+        'position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;' +
+        'transform:translateX(-50%);z-index:140;background:rgba(15,18,20,0.94);' +
+        'color:#f0a63c;border:0.5px solid rgba(240,166,60,0.6);border-radius:999px;' +
+        'padding:9px 16px;font:600 11px/1 Manrope,sans-serif;letter-spacing:0.12em;' +
+        'pointer-events:none;white-space:nowrap;';
+      document.body.appendChild(recoverBanner);
+    }
+    recoverBanner.style.display = 'block';
+  } else if (recoverBanner) recoverBanner.style.display = 'none';
+}
+function rebuildAudioGraph() {
+  try { if (audioCtx) audioCtx.close(); } catch (e) {}
+  const keepGain = inputTrim ? inputTrim.gain.value : 1;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  _triangleWave = null; toneDest = null; micSource = null;
+  toneOsc1 = null; toneOsc2 = null; toneGainNode = null; currentlyPlayingString = null;
+  document.querySelectorAll('.tone-card').forEach(b => b.classList.remove('playing'));
+  if (toneEl && !toneEl.paused) toneEl.pause();
+  inputTrim = audioCtx.createGain();
+  inputTrim.gain.value = keepGain;
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = FFT_SIZE;
+  analyser.smoothingTimeConstant = 0.1;
+  inputTrim.connect(analyser);
+  fastAnalyser = audioCtx.createAnalyser();
+  fastAnalyser.fftSize = FAST_FFT_SIZE;
+  fastAnalyser.smoothingTimeConstant = 0;
+  inputTrim.connect(fastAnalyser);
+  ctxStalled = false; ctxTimeMark = -1;
+}
+function audioUnhealthy() {
+  if (!isListening) return false;
+  if (micDead || ctxStalled) return true;
+  // early signals so a tap works within ~0.5s of returning, before the
+  // slower dead-declaration flows finish
+  if (zeroSinceMs > 400 || rmsSameCount > 12) return true;
+  if (audioCtx && audioCtx.state !== 'running') return true;
+  const t = micStream && micStream.getAudioTracks()[0];
+  return !t || t.readyState === 'ended' || t.muted;
+}
+async function gestureRecover() {
+  if (micReacquiring || !isListening) return;
+  if (!audioUnhealthy()) return;
+  try { if (audioCtx && audioCtx.state !== 'running') await audioCtx.resume(); } catch (e) {}
+  if (!audioCtx || audioCtx.state !== 'running' || ctxStalled) rebuildAudioGraph();
+  await ensureAudioCtxReady();
+  await reacquireMic();
+}
+['click', 'touchend'].forEach(ev =>
+  document.addEventListener(ev, () => { if (audioUnhealthy()) gestureRecover(); }, true));
+async function playToneForString(stringName) {
+  const ready = ensureAudioCtxReady();   // sync prefix creates ctx + toneEl now
+  // The silent unlock element must play only WHILE a tone sounds: left
+  // running forever it develops periodic ticking on some iPhones. Start it
+  // here, still inside the tap gesture, before any await.
+  if (toneEl && toneEl.paused) { const p = toneEl.play(); if (p && p.catch) p.catch(() => {}); }
+  await ready;
+  if (currentlyPlayingString === stringName) { stopTone(); return; }
+  if (currentlyPlayingString) stopTone();
+  const freq = midiToFreq(strMidi(+stringName));
+  const t = audioCtx.currentTime;
+  const isMobile = IS_MOBILE_DEVICE;
+  const targetGain = isMobile ? 1.0 : 0.70;
+  toneGainNode = audioCtx.createGain();
+  toneGainNode.gain.setValueAtTime(0, t);
+  toneGainNode.gain.linearRampToValueAtTime(targetGain, t + 0.08);
+  toneGainNode.connect(audioCtx.destination);
+  toneOsc1 = audioCtx.createOscillator();
+  if (_triangleWave) toneOsc1.setPeriodicWave(_triangleWave);
+  else toneOsc1.type = 'triangle';
+  toneOsc1.frequency.value = freq;
+  toneOsc1.connect(toneGainNode);
+  toneOsc1.start(t);
+  currentlyPlayingString = stringName;
+  document.querySelectorAll('.tone-card').forEach(b =>
+    b.classList.toggle('playing', b.dataset.string === stringName));
+}
+function stopTone() {
+  if (toneGainNode && audioCtx) {
+    const t = audioCtx.currentTime;
+    toneGainNode.gain.cancelScheduledValues(t);
+    toneGainNode.gain.setValueAtTime(toneGainNode.gain.value, t);
+    toneGainNode.gain.linearRampToValueAtTime(0, t + 0.08);
+    if (toneOsc1) { try { toneOsc1.stop(t + 0.09); } catch (e) {} toneOsc1 = null; }
+    if (toneOsc2) { try { toneOsc2.stop(t + 0.09); } catch (e) {} toneOsc2 = null; }
+    toneGainNode = null;
+  }
+  currentlyPlayingString = null;
+  document.querySelectorAll('.tone-card').forEach(b => b.classList.remove('playing'));
+  if (toneEl && !toneEl.paused) toneEl.pause();
+}
+function updatePlayingToneFreq() {
+  if (!currentlyPlayingString) return;
+  if (toneOsc1) toneOsc1.frequency.value = midiToFreq(strMidi(+currentlyPlayingString));
+}
+
+// ─── microphone ───
+const MIC_CONSTRAINTS = {
+  audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  video: false
+};
+// Verify the OS honoured our request to disable voice processing —
+// AGC / noise suppression / echo cancellation mangle sustained tones.
+// If any stayed on, the listen dot turns amber instead of green.
+function verifyVoiceProcessing(stream) {
+  try {
+    const tr = stream.getAudioTracks()[0];
+    const st = tr && tr.getSettings ? tr.getSettings() : {};
+    const bad = !!(st.echoCancellation || st.noiseSuppression || st.autoGainControl);
+    document.querySelectorAll('.listen-dot').forEach(d => {
+      d.classList.toggle('warn', bad);
+      d.title = bad ? 'Voice processing (AGC/NS/EC) is still active on this device' : '';
+    });
+  } catch (e) {}
+}
+function watchMicTrack(stream) {
+  const t = stream.getAudioTracks()[0];
+  if (t) t.addEventListener('ended', () => { if (!document.hidden && !IS_IOS_STANDALONE) reacquireMic(); });
+}
+// iOS home-screen apps: switching to another app and back usually leaves the
+// mic track dead ('ended') or permanently muted while the page lives on —
+// the only cure is a FRESH getUserMedia, rewired into the existing graph
+// (same session, so no new permission prompt).
+async function reacquireMic() {
+  if (micReacquiring || !isListening || !inputTrim) return;
+  micReacquiring = true;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+    if (micSource) { try { micSource.disconnect(); } catch (e) {} }
+    if (micStream) for (const t of micStream.getTracks()) { try { t.stop(); } catch (e) {} }
+    micStream = s;
+    verifyVoiceProcessing(s);
+    watchMicTrack(s);
+    micSource = audioCtx.createMediaStreamSource(s);
+    micSource.connect(inputTrim);
+    if (audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
+  } catch (e) {}
+  micReacquiring = false;
+}
+async function initMic() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+    await ensureAudioCtxReady();
+    verifyVoiceProcessing(stream);
+    // hint the OS audio session: mic + media playback together (iOS 17+)
+    try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
+    micStream = stream;
+    watchMicTrack(stream);
+    micSource = audioCtx.createMediaStreamSource(stream);
+    // With AGC disabled (required for accuracy) phone mics deliver a very
+    // low raw level. inputTrim is a FIXED make-up gain — a pure constant is
+    // completely transparent to every detection measurement (the dynamic,
+    // self-adjusting version fought the core: its gain ramps read as fake
+    // bow attacks and its noise-floor tracker learned sustained playing as
+    // "ambience", deadening the tuner mid-piece. Never again.)
+    inputTrim = audioCtx.createGain();
+    inputTrim.gain.value = IS_MOBILE_DEVICE ? 12 : 1;
+    micSource.connect(inputTrim);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = FFT_SIZE;
+    analyser.smoothingTimeConstant = 0.1;
+    inputTrim.connect(analyser);
+    fastAnalyser = audioCtx.createAnalyser();
+    fastAnalyser.fftSize = FAST_FFT_SIZE;
+    fastAnalyser.smoothingTimeConstant = 0;
+    inputTrim.connect(fastAnalyser);
+    isListening = true;
+    $('permOverlay').classList.add('hidden');
+    loop();
+  } catch (e) {
+    alert('Microphone access denied. Please enable it in your browser settings and reload.');
+  }
+}
+
+// ─── vibrato (display feature) ───
+function updateVibrato(rawCents) {
+  const now = performance.now();
+  singleHistory.push({ t: now, cents: rawCents });
+  while (singleHistory.length && now - singleHistory[0].t > VIB_HISTORY_MS) singleHistory.shift();
+  if (singleHistory.length < 15) { isVibratoActive = false; return; }
+  let mn = Infinity, mx = -Infinity, sum = 0;
+  for (const p of singleHistory) { if (p.cents < mn) mn = p.cents; if (p.cents > mx) mx = p.cents; sum += p.cents; }
+  const mean = sum / singleHistory.length, range = mx - mn;
+  let x = 0, last = 0;
+  for (const p of singleHistory) { const s = p.cents > mean ? 1 : -1; if (last && s !== last) x++; last = s; }
+  const dur = (singleHistory[singleHistory.length - 1].t - singleHistory[0].t) / 1000;
+  const estHz = dur > 0 ? (x / 2 / dur) : 0;
+  isVibratoActive = range > 8 && estHz >= 3.5 && estHz <= 9;
+  if (isVibratoActive) { vibratoCenter = mean; vibratoRange = { min: mn, max: mx }; }
+}
+
+// ─── main loop (microphone path) ───
+let _timeBuf = null, _specBuf = null, _fastBuf = null;
+function loop() {
+  if (!isListening) return;
+  requestAnimationFrame(loop);
+  const wnow = performance.now();
+  // Detection is validated at 30fps by the full test battery — running the
+  // analysis at display rate (60Hz rAF, 120Hz ProMotion) just converts
+  // battery into heat for zero accuracy. Cap the whole working set at 30.
+  if (wnow - lastAnalysisMs < 33) return;
+  lastAnalysisMs = wnow;
+  if (Design.tick) Design.tick(wnow);
+  // watchdog: iOS can hand back a suspended context or a dead/muted mic
+  // track without firing any event — check every ~2.5s while visible
+  if (wnow - micWatchMs > 2500 && !document.hidden) {
+    micWatchMs = wnow;
+    if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
+    else if (audioCtx) {
+      // context claims to run but its clock is frozen → bricked, needs rebuild
+      if (audioCtx.currentTime === ctxTimeMark && wnow - ctxTimeMarkMs > 3000) ctxStalled = true;
+      if (audioCtx.currentTime !== ctxTimeMark) {
+        ctxTimeMark = audioCtx.currentTime; ctxTimeMarkMs = wnow; ctxStalled = false;
+      }
+    }
+    const wt = micStream && micStream.getAudioTracks()[0];
+    if (((wt && (wt.readyState === 'ended' || wt.muted)) || micDead) && !IS_IOS_STANDALONE) reacquireMic();
+  }
+  if (!_timeBuf) _timeBuf = new Float32Array(BUF_SIZE);
+  if (!_specBuf) _specBuf = new Float32Array(analyser.frequencyBinCount);
+  if (!_fastBuf) _fastBuf = new Float32Array(fastAnalyser.frequencyBinCount);
+
+  analyser.getFloatTimeDomainData(_timeBuf);
+  drawWave(_timeBuf);
+  let rms = 0, peak = 0;
+  for (let i = 0; i < _timeBuf.length; i++) {
+    const v = _timeBuf[i];
+    rms += v * v;
+    const a = v < 0 ? -v : v;
+    if (a > peak) peak = a;
+  }
+  rms = Math.sqrt(rms / _timeBuf.length);
+  // slow input trim (see initMic): raise the linear make-up gain while a
+  // real signal sits well above the tracked noise floor yet still reads
+  // quiet; back off if we approach full scale. ≤ ~10dB/s slew.
+  // dead-input detector: a live mic always carries a noise floor — exact
+  // zeros mean a zombie track; and a STALLED graph replays the analyser's
+  // old ring buffer, so bit-identical rms across ~40 frames (impossible
+  // for live audio) counts as dead too.
+  if (rms === lastRmsExact) rmsSameCount++; else { rmsSameCount = 0; lastRmsExact = rms; }
+  if (peak <= 1e-7 || rmsSameCount > 40) {
+    zeroSinceMs += lastLoopMs ? Math.min(200, wnow - lastLoopMs) : 16;
+    const zt = micStream && micStream.getAudioTracks()[0];
+    const zEnded = !zt || zt.readyState === 'ended';
+    // an 'ended' track can never revive; a muted/zombie one often does
+    // within a few seconds — be patient before declaring death
+    const deadAfter = zEnded ? 700 : 3500;
+    if (zeroSinceMs > deadAfter && !micDead) {
+      micDead = true;
+      if (IS_IOS_STANDALONE) showRecoverBanner(true);   // prompt only on the user's tap
+      else reacquireMic();
+    }
+    if (micDead && zeroSinceMs > deadAfter + 2500) showRecoverBanner(true);
+  } else {
+    zeroSinceMs = 0;
+    if (micDead) { micDead = false; showRecoverBanner(false); }
+  }
+  lastLoopMs = wnow;
+  // ONE static silence gate, in the raw (pre-gain) domain. No adaptive
+  // floors: every tracker we tried eventually learned the player's own
+  // sustained sound as "ambience" and deadened the tuner mid-piece.
+  const gNow = inputTrim ? inputTrim.gain.value : 1;
+  const rawRms = rms / gNow;
+  const silentNow = rawRms < (currentlyPlayingString ? 0.004 : 0.0025);
+  const now = performance.now();
+  if (silentNow) {
+    DSPCore.noteSilence(dspState);
+    noneSinceMs = 0;
+    if (now - lastSignalTime < FREEZE_DURATION_MS && lastSignalTime > 0 && now - uiActiveSince >= 400) {
+      if (!isFrozen) { isFrozen = true; document.body.classList.add('frozen'); }
+    } else {
+      isFrozen = false; document.body.classList.remove('frozen');
+      if (uiMode !== 'idle') { uiMode = 'idle'; renderIdle(); }
+      resetDetection();
+    }
+    return;
+  }
+  lastSignalTime = now;
+
+  analyser.getFloatFrequencyData(_specBuf);
+  fastAnalyser.getFloatFrequencyData(_fastBuf);
+
+  const r = DSPCore.processFrame(dspState, {
+    nowMs: now, sr: audioCtx.sampleRate,
+    spec: _specBuf, fftSize: FFT_SIZE,
+    fastSpec: _fastBuf, fastFftSize: FAST_FFT_SIZE,
+    timeBuf: _timeBuf, refA: REF_A,
+  });
+
+  if (r.mode === 'none') {
+    if (!noneSinceMs) noneSinceMs = now;
+    if (now - noneSinceMs > 500 && uiMode !== 'idle') {
+      // the note ended while sound (its tail) is still above the silence
+      // gates — hold the last reading exactly like the silence path does,
+      // then dim to idle. Without this, the freeze loses the race.
+      if (now - uiActiveSince >= 400 && now - noneSinceMs < FREEZE_DURATION_MS) {
+        if (!isFrozen) { isFrozen = true; document.body.classList.add('frozen'); }
+      } else {
+        isFrozen = false; document.body.classList.remove('frozen');
+        uiMode = 'idle'; renderIdle(); resetDetection();
+      }
+    }
+    return;
+  }
+  noneSinceMs = 0;
+  if (uiMode === 'idle') uiActiveSince = now;
+  if (isFrozen) { isFrozen = false; document.body.classList.remove('frozen'); }
+  if (r.mode === 'single' && r.rawMidi !== undefined) {
+    updateVibrato((r.rawMidi - Math.round(r.rawMidi)) * 100);
+  }
+  applyResult(r, now);
+}
+
+function applyResult(r, now) {
+  let render = now - lastRenderMs >= RENDER_INTERVAL_MS;
+  if (r.mode !== uiMode) {
+    uiMode = r.mode;
+    document.body.dataset.mode = uiMode;
+    if (uiMode !== 'double') { dormantVoiceB(); resetBeat(); }
+    render = true;
+  }
+  if (!render) return;
+  lastRenderMs = now;
+  if (r.mode === 'single') renderSingle(r);
+  else if (r.mode === 'double') renderDouble(r);
+}
+
+// ─── unified rendering ───
+function setStamp(state) {
+  const el = $('topbarStamp');
+  el.classList.remove('good', 'bad');
+  if (state === 'good') { el.textContent = '✓'; el.classList.add('good'); }
+  else if (state === 'bad') { el.textContent = '!'; el.classList.add('bad'); }
+  else el.textContent = '◦';
+}
+
+function setIv(html, meta, cls) {
+  $('ivName').innerHTML = html;
+  $('ivMeta').textContent = meta;
+  const strip = $('ivStrip');
+  strip.classList.remove('idle', 'vib');
+  if (cls) strip.classList.add(cls);
+}
+
+function fmtCents(c) { return (c >= 0 ? '+' : '') + c.toFixed(1) + '¢'; }
+
+function setVoiceNote(slot, midi) {
+  const { name, octave } = midiToName(Math.round(midi));
+  $('v' + slot + '_letter').textContent = name;
+  const o = $('v' + slot + '_oct'); o.textContent = octave; o.classList.remove('hidden');
+  $('v' + slot + '_freq').textContent = midiToFreqD(midi).toFixed(2) + ' Hz';
+}
+function setVoicePill(slot, cls, html) {
+  const p = $('v' + slot + '_pill');
+  p.className = 'pill ' + cls;
+  p.innerHTML = html;
+}
+function clearVoice(slot, pillHtml) {
+  $('v' + slot + '_letter').textContent = '—';
+  const o = $('v' + slot + '_oct'); o.textContent = ''; o.classList.add('hidden');
+  $('v' + slot + '_freq').textContent = '— Hz';
+  $('v' + slot + '_cents').textContent = '—';
+  setVoicePill(slot, 'idle', pillHtml);
+  $('voice' + slot).classList.remove('ok');
+  Design.meter(slot, null, false);
+}
+function dormantVoiceB() {
+  $('vB_role').textContent = 'adjust · waiting';
+  clearVoice('B', '<em>second voice</em>');
+}
+
+function renderIdle() {
+  document.body.dataset.mode = 'idle';
+  setIv('<em>— awaiting signal —</em>', '', 'idle');
+  $('vA_role').textContent = 'now playing';
+  clearVoice('A', '<em>awaiting</em>');
+  dormantVoiceB();
+  resetBeat();
+  setStamp('idle');
+}
+
+function renderSingle(r) {
+  const sm = r.midi;
+  let cents = (sm - Math.round(sm)) * 100;
+  if (isVibratoActive) cents = vibratoCenter;
+  $('vA_role').textContent = 'now playing';
+  setVoiceNote('A', sm);
+  $('vA_cents').textContent = fmtCents(cents);
+  const ok = Math.abs(cents) <= TOLERANCE_CENTS;
+  if (isVibratoActive) {
+    setIv('<em>— vibrato detected —</em>', 'centre of oscillation', 'vib');
+    setVoicePill('A', 'vib', `Vibrato · ${fmtCents(cents)}`);
+  } else {
+    setIv('<em>— single note —</em>', 'equal temperament', null);
+    if (ok) setVoicePill('A', 'good', 'In Tune ✓');
+    else setVoicePill('A', 'bad', (cents > 0 ? '▲ Sharp ' : '▼ Flat ') + Math.abs(cents).toFixed(1) + '¢');
+  }
+  $('voiceA').classList.toggle('ok', ok && !isVibratoActive);
+  Design.meter('A', cents, ok);
+  setStamp(ok || isVibratoActive ? 'good' : 'bad');
+}
+
+function renderDouble(r) {
+  const iv = r.interval;
+  setIv(iv ? `<em>${iv.name}</em>` : '<em>—</em>',
+        iv ? `${iv.meta} — just intonation` : 'interval ratio', null);
+
+  // STATUS wording (Sharp/Flat) for the anchor; ACTION wording
+  // (Raise/Lower) for the note the player should move.
+  const statusPill = (slot, c) => {
+    const ok = Math.abs(c) <= TOLERANCE_CENTS;
+    if (ok) setVoicePill(slot, 'good', 'In Tune ✓');
+    else setVoicePill(slot, 'bad', (c > 0 ? '▲ Sharp ' : '▼ Flat ') + Math.abs(c).toFixed(1) + '¢');
+    return ok;
+  };
+  const actionPill = (slot, c) => {
+    const ok = Math.abs(c) <= TOLERANCE_CENTS;
+    if (ok) setVoicePill(slot, 'good', 'In Tune ✓');
+    else setVoicePill(slot, 'bad', (c > 0 ? '▼ Lower ' : '▲ Raise ') + Math.abs(c).toFixed(1) + '¢');
+    return ok;
+  };
+
+  setVoiceNote('A', r.loMidi);
+  setVoiceNote('B', r.hiMidi);
+  const flip = r.anchor === 'high' && !!iv;
+  let okRef = false, okAdj = false;
+
+  if (!flip) {
+    // normal: lower note anchors (vs the tempered grid), upper adjusts to just
+    $('vA_role').textContent = 'reference · hold';
+    $('vB_role').textContent = 'adjust';
+    const cA = (r.loMidi - Math.round(r.loMidi)) * 100;
+    $('vA_cents').textContent = fmtCents(cA);
+    okRef = statusPill('A', cA);
+    Design.meter('A', cA, okRef);
+    if (iv) {
+      const cft = 1200 * Math.log2(midiToFreqD(r.hiMidi) / (r.fLo * iv.ratio));
+      $('vB_cents').textContent = fmtCents(cft);
+      okAdj = actionPill('B', cft);
+      Design.meter('B', cft, okAdj);
+      updateBeating(r.beatHz);
+    } else {
+      const cB = (r.hiMidi - Math.round(r.hiMidi)) * 100;
+      $('vB_cents').textContent = fmtCents(cB);
+      okAdj = Math.abs(cB) <= TOLERANCE_CENTS;
+      setVoicePill('B', okAdj ? 'good' : 'bad', okAdj ? 'In Tune ✓' : fmtCents(cB));
+      Design.meter('B', cB, okAdj);
+      resetBeat();
+    }
+    $('voiceA').classList.toggle('ok', okRef);
+    $('voiceB').classList.toggle('ok', okAdj);
+  } else {
+    // the UPPER note is an open string: it is immovable, so IT anchors —
+    // the stopped lower note gets the Raise/Lower instructions, aimed at
+    // the just target derived FROM the open string.
+    $('vB_role').textContent = 'reference · open string';
+    $('vA_role').textContent = 'adjust';
+    const cB = (r.hiMidi - Math.round(r.hiMidi)) * 100;
+    $('vB_cents').textContent = fmtCents(cB);
+    okRef = statusPill('B', cB);
+    Design.meter('B', cB, okRef);
+    const cft = 1200 * Math.log2(midiToFreqD(r.loMidi) / (r.fHi / iv.ratio));
+    $('vA_cents').textContent = fmtCents(cft);
+    okAdj = actionPill('A', cft);
+    Design.meter('A', cft, okAdj);
+    updateBeating(r.beatHz);
+    $('voiceA').classList.toggle('ok', okAdj);
+    $('voiceB').classList.toggle('ok', okRef);
+  }
+  setStamp(okAdj ? 'good' : 'bad');
+}
+
+// ─── beating strip ───
+let lastPulseDuration = null;
+function updateBeating(b) {
+  const vel = $('beatVal');
+  if (b === null || b === undefined) { resetBeat(); return; }
+  vel.innerHTML = `${b.toFixed(2)} <em>Hz</em>`;
+  vel.classList.toggle('good', b < 0.5);
+  vel.classList.toggle('bad', b >= 5);
+  $('beatFill').style.width = Math.min(100, b / 10 * 100) + '%';
+  const pulse = $('beatPulse');
+  if (b < 0.1) { stopBeatingPulse(); }
+  else {
+    const dur = Math.round(Math.max(0.1, Math.min(2.5, 0.5 / b)) * 20) / 20;
+    if (dur !== lastPulseDuration) {
+      lastPulseDuration = dur;
+      pulse.classList.remove('active'); pulse.style.animationDuration = dur + 's';
+      void pulse.offsetWidth; pulse.classList.add('active');
+    }
+  }
+}
+function stopBeatingPulse() {
+  const p = $('beatPulse');
+  p.classList.remove('active'); p.style.animationDuration = ''; lastPulseDuration = null;
+}
+function resetBeat() {
+  $('beatVal').innerHTML = '<em>—</em>';
+  $('beatVal').classList.remove('good', 'bad');
+  $('beatFill').style.width = '0%';
+  stopBeatingPulse();
+}
+
+// ─── waveform ───
+function drawWave(buf) {
+  const canvas = $('waveCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== canvas.offsetWidth * dpr) {
+    canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr;
+  }
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.beginPath();
+  ctx.strokeStyle = (typeof WAVE_STROKE !== 'undefined') ? WAVE_STROKE : 'rgba(74,106,82,0.55)';
+  ctx.lineWidth = 1.2 * dpr;
+  const step = Math.max(1, Math.floor(buf.length / W));
+  for (let x = 0; x < W; x++) {
+    const v = buf[x * step] || 0, y = H / 2 + v * (H / 2) * 0.85;
+    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+// ─── demo mode (#demo): an automated show-reel, no microphone ───
+const DEMO = /demo/.test(location.hash);
+// #demo → looping show-reel; #demo=7.5 → frozen at that instant (screenshots)
+const DEMO_FIXED = (() => {
+  const m = location.hash.match(/demo=([\d.]+)/);
+  return m ? parseFloat(m[1]) : null;
+})();
+let demoT0 = 0;
+const demoWaveBuf = new Float32Array(512);
+function demoLoop() {
+  requestAnimationFrame(demoLoop);
+  const now = performance.now();
+  if (Design.tick) Design.tick(now);
+  const t = DEMO_FIXED !== null ? DEMO_FIXED : ((now - demoT0) / 1000) % 13.5;
+
+  // little synthetic wave for the strip
+  const busy = t >= 1.0 && t < 12.2;
+  for (let i = 0; i < demoWaveBuf.length; i++) {
+    demoWaveBuf[i] = busy
+      ? 0.32 * Math.sin(i * 0.19 + now * 0.011) + 0.16 * Math.sin(i * 0.38 + now * 0.017)
+      : 0.012 * Math.sin(i * 0.05 + now * 0.002);
+  }
+  drawWave(demoWaveBuf);
+
+  let r;
+  if (t < 1.0 || t >= 12.2) {
+    if (uiMode !== 'idle') { uiMode = 'idle'; renderIdle(); }
+    return;
+  } else if (t < 5.6) {
+    // single A4: overshoot then settle into tune
+    const u = t - 1.0;
+    const c = -16 * Math.exp(-u / 0.85) * Math.cos(u * 2.4) + 0.7 * Math.sin(t * 1.9);
+    r = { mode: 'single', midi: 69 + c / 100, rawMidi: 69 + c / 100 };
+  } else {
+    // double: A4 + C♯5 major third, upper settles onto the just target
+    const u = t - 5.6;
+    const cA = 0.8 * Math.sin(t * 1.1);
+    const cft = 13 * Math.exp(-u / 1.15) + 0.6 * Math.sin(t * 1.6);
+    const loMidi = 69 + cA / 100;
+    const fLo = midiToFreqD(loMidi);
+    const hiMidi = loMidi + 3.86314 + cft / 100;
+    r = {
+      mode: 'double', loMidi, hiMidi, fLo, fHi: midiToFreqD(hiMidi),
+      interval: { name: 'Major 3rd', meta: '5 : 4', ratio: 1.25, d: 4 },
+      beatHz: Math.abs(cft) * 0.29, beatMeasured: true,
+    };
+  }
+  applyResult(r, now);
+}
+
+// ─── boot ───
+document.addEventListener('DOMContentLoaded', () => {
+  Design.init();
+  Design.tolerance(TOLERANCE_CENTS);
+  renderIdle();
+});
+setupRefButton('refMinus', -1);
+setupRefButton('refPlus', 1);
+updateRefDisplay();
+
+// ─── forced portrait: the app never re-lays-out to landscape ───
+// iOS has no orientation.lock for web pages, so when the OS rotates the
+// viewport we counter-rotate the whole body — content stays fixed to the
+// DEVICE exactly like a natively portrait-locked app. Android gets the
+// real lock API below. #rot=90/270 in the URL forces it (debug/preview).
+function applyOrientationLock() {
+  let angle = null;
+  try {
+    if (screen.orientation && typeof screen.orientation.angle === 'number') angle = screen.orientation.angle;
+    else if (typeof window.orientation === 'number') angle = (window.orientation + 360) % 360;
+  } catch (e) {}
+  const m = location.hash.match(/rot=(\d+)/);
+  if (m) angle = +m[1];
+  const w = window.innerWidth, h = window.innerHeight;
+  // Decide by the viewport's actual SHAPE — angle conventions differ per
+  // device (iPads notoriously). A landscape-shaped viewport on a touch
+  // device gets counter-rotated into portrait; desktops are never touched.
+  const b = document.body;
+  if ((IS_PHONE || m) && w > h) {
+    let rot = -90;
+    if (angle === 90) rot = -90;
+    else if (angle === 270) rot = 90;
+    else {
+      try {
+        if (/secondary/.test((screen.orientation && screen.orientation.type) || '')) rot = 90;
+      } catch (e) {}
+    }
+    b.style.width = h + 'px';
+    b.style.height = w + 'px';
+    b.style.top = ((h - w) / 2) + 'px';
+    b.style.left = ((w - h) / 2) + 'px';
+    b.style.transform = 'rotate(' + rot + 'deg)';
+    b.classList.toggle('rl', rot === -90);
+    b.classList.toggle('rr', rot === 90);
+  } else {
+    b.style.width = ''; b.style.height = ''; b.style.top = ''; b.style.left = '';
+    b.style.transform = '';
+    b.classList.remove('rl', 'rr');
+  }
+}
+window.addEventListener('orientationchange', () => setTimeout(applyOrientationLock, 60));
+window.addEventListener('resize', () => setTimeout(applyOrientationLock, 60));
+applyOrientationLock();
+try {
+  if (IS_PHONE && screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(() => {});
+} catch (e) {}
+
+document.querySelectorAll('.tone-card').forEach(btn => {
+  btn.addEventListener('click', () => { playToneForString(btn.dataset.string); });
+});
+if (DEMO) {
+  window.addEventListener('load', () => {
+    if (/still/.test(location.hash)) {
+      const st = document.createElement('style');
+      st.textContent = '* { transition: none !important; animation-duration: 0.01s !important; }';
+      document.head.appendChild(st);
+    }
+    $('permOverlay').classList.add('hidden');
+    demoT0 = performance.now();
+    demoLoop();
+  });
+}
+
+</script>
+</body>
+</html>
